@@ -33,6 +33,7 @@ def main():
         setup.prepare_environment()
     except Exception as e:
         logger.exception(f"Environment setup failed: {e}")
+        
         sys.exit(1)
 
     # --- Generate server config from server.json/schema (must exist in config dir now) ---

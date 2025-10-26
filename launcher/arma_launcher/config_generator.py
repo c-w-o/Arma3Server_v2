@@ -13,6 +13,9 @@ try:
 except ModuleNotFoundError:
     json5 = None
 
+# Default schema location: next to launcher.py (one level above this package)
+DEFAULT_SCHEMA_PATH = Path(__file__).resolve().parent.parent / "server_schema.json"
+
 
 def load_json(path: Path):
     """Load JSON file; prefer json5 if available to allow comments/trailing commas."""
@@ -91,7 +94,8 @@ def generate_for_config(cfg, schema_path: Path = None, output_name: str = "gener
     logger = get_logger().getChild("config_generator")
     config_dir = Path(cfg.config_dir)
     server_json = config_dir / "server.json"
-    schema_file = Path(schema_path) if schema_path else (config_dir / "server_schema.json")
+    # prefer explicit schema_path, otherwise use the shipped schema next to launcher.py
+    schema_file = Path(schema_path) if schema_path else DEFAULT_SCHEMA_PATH
     output_cfg = config_dir / output_name
 
     logger.info("Generating a3server.cfg from %s (schema=%s)", server_json, schema_file)
@@ -125,6 +129,10 @@ def generate_for_config(cfg, schema_path: Path = None, output_name: str = "gener
 
 def main():
     logger.info("Validating and generating a3server.cfg...")
+
+    # ensure SCHEMA_FILE falls back to the shipped schema next to launcher.py
+    if "SCHEMA_FILE" not in globals():
+        SCHEMA_FILE = DEFAULT_SCHEMA_PATH
 
     try:
         if not os.path.exists(SERVER_JSON):
