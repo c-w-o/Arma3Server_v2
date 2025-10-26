@@ -8,6 +8,7 @@ import os
 import time
 import subprocess
 import re
+import select
 from pathlib import Path
 from arma_launcher.log import get_logger
 
@@ -35,6 +36,8 @@ class SteamCMD:
             "+workshop_download_item", "107410", str(steam_id), "validate",
             "+quit",
         ]
+        
+        logger.debug(f"STEAM CMD: {cmd}")
 
         for attempt in range(1, retries + 1):
             logger.info(f"Downloading mod attempt {attempt}/{retries} of {steam_id} - {name}...")
@@ -42,11 +45,53 @@ class SteamCMD:
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
             output_accum = []
             last_percent = None
+            last_output_time = time.monotonic()
+            NO_OUTPUT_TIMEOUT = 60  # seconds without any output -> assume interactive prompt / stuck
             try:
-                # line-by-line streaming (works best when steamcmd flushes lines)
-                for line in proc.stdout:
+                # read with select so we can implement a no-output watchdog
+                stdout = proc.stdout
+                while True:
+                    # check if process ended and no more data
+                    if proc.poll() is not None:
+                        # drain any remaining lines
+                        for line in stdout:
+                            line = line.rstrip("\n")
+                            output_accum.append(line)
+                        break
+
+                    rlist, _, _ = select.select([stdout], [], [], 1.0)
+                    if not rlist:
+                        # no new data this second -> check watchdog
+                        if (time.monotonic() - last_output_time) > NO_OUTPUT_TIMEOUT:
+                            logger.error("SteamCMD produced no output for %s seconds after login — likely waiting for Steam Guard / interactive input. Aborting.", NO_OUTPUT_TIMEOUT)
+                            # capture current accumulated output for debugging
+                            try:
+                                proc.kill()
+                            except Exception:
+                                pass
+                            output = "\n".join(output_accum)
+                            logger.debug("SteamCMD partial output:\n%s", output)
+                            return False
+                        continue
+
+                    # data available
+                    line = stdout.readline()
+                    if line == "":
+                        continue
                     line = line.rstrip("\n")
+                    last_output_time = time.monotonic()
                     output_accum.append(line)
+
+                    # detect interactive prompts that require user input (Steam Guard / 2FA / captcha)
+                    low = line.lower()
+                    if "steam guard" in low or "authentication code" in low or "code from the steam app" in low or "please enter the" in low and ("code" in low or "steam" in low):
+                        logger.error("SteamCMD is asking for interactive authentication: %s", line)
+                        try:
+                            proc.kill()
+                        except Exception:
+                            pass
+                        return False
+
                     # look for percentage patterns like "12%" or "12.3 %"
                     m = re.search(r"(\d{1,3}(?:\.\d+)?)\s*%", line)
                     if m:
@@ -59,7 +104,6 @@ class SteamCMD:
                         # generic progress/info lines
                         logger.debug(f"SteamCMD: {line}")
 
-                proc.wait()
                 output = "\n".join(output_accum)
 
                 # detect common failure cases from accumulated output
