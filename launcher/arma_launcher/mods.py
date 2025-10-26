@@ -136,6 +136,7 @@ class ModManager:
 
         # try to obtain raw config structure (supporting either object or dict)
         defaults = _get(self.cfg, "defaults", {}) or {}
+        logger.debug(f"xdefaults: {defaults}")
         active = None
         # try common places for active config
         active = _get(self.cfg, "active", None) or _get(self.cfg, "active_config", None)
@@ -150,8 +151,10 @@ class ModManager:
 
         defaults_mods = _get(defaults, "mods", {}) or {}
         active_mods = _get(active, "mods", {}) or {}
-        logger.debug("defaults_mods: {defaults_mods}")
-        logger.debug("active_mods: {active_mods}")
+        logger.debug(f"defaults_mods: {defaults_mods}")
+        logger.debug(f"active_mods: {active_mods}")
+        logger.debug(f"defaults: {defaults}")
+        logger.debug(f"active: {active}")
         # start with defaults, then extend with active
         keys = set(list(defaults_mods.keys()) + list(active_mods.keys()))
         effective = {}
