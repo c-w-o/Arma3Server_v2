@@ -72,30 +72,33 @@ class SteamCMD:
     # ---------------------------------------------------------------------- #
     def get_last_update_date(self, steam_id: str):
         """
-        Scrapes the Steam Workshop page for a given mod to find the last update time.
+        Query Steam Web API (GetPublishedFileDetails) to get the last update timestamp.
+        Falls das fehlschlägt, gibt None zurück.
         """
-        import ssl
+        import json
         import urllib.request
+        import urllib.parse
         from datetime import datetime
 
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
+        url = "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/"
+        post_data = urllib.parse.urlencode({
+            "itemcount": "1",
+            "publishedfileids[0]": str(steam_id),
+        }).encode("utf-8")
 
-        url = f"https://steamcommunity.com/sharedfiles/filedetails/{steam_id}"
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        req = urllib.request.Request(url, data=post_data, headers={"User-Agent": "Mozilla/5.0"})
         try:
-            with urllib.request.urlopen(req, context=ctx, timeout=30) as resp:
-                html = resp.read().decode(resp.headers.get_content_charset() or "utf-8")
-
-            matches = re.findall(r'\"detailsStatRight\".*?>(.*?)<', html, re.MULTILINE)
-            if len(matches) >= 2:
-                try:
-                    dt = datetime.strptime(matches[-1], "%d %b, %Y @ %I:%M%p")
-                except ValueError:
-                    dt = datetime.strptime(matches[-1], "%d %b @ %I:%M%p").replace(year=datetime.now().year)
-                return dt
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                body = resp.read().decode("utf-8")
+            j = json.loads(body)
+            details = j.get("response", {}).get("publishedfiledetails", [])
+            if not details:
+                return None
+            time_updated = details[0].get("time_updated")
+            if not time_updated:
+                return None
+            # time_updated is an epoch timestamp (UTC)
+            return datetime.utcfromtimestamp(int(time_updated))
         except Exception as e:
-            logger.error(f"Failed to retrieve update date for {steam_id}: {e}")
-
-        return None
+            logger.debug(f"GetPublishedFileDetails failed for {steam_id}: {e}")
+            return None

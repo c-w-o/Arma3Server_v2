@@ -29,11 +29,15 @@ class ModManager:
         """
         logger.info("Starting mod synchronization...")
 
+        # load metadata (steamid -> {last_update_remote, last_download})
+        self._meta = self._load_meta()
+
         # Resolve effective mod lists by merging defaults + active config and removing minus-mods
         effective = self._get_effective_mod_lists()
         
         mods_to_download = []
         # consider all mod categories for download
+        from datetime import datetime
         for key, modlist in effective.items():
             for entry in modlist:
                 # expect entries as [name, steamid]
@@ -46,16 +50,63 @@ class ModManager:
                     logger.debug(f"Skipping non-Steam mod: {name}")
                     continue
                 mod_path = self.workshop_dir / steamid
+                # If missing -> download. If present, compare workshop last update date with local mtime.
+                need_download = False
                 if not mod_path.exists():
+                    need_download = True
                     logger.info(f"Missing mod {name} ({steamid}) — queued for download.")
-                    mods_to_download.append((name, steamid))
                 else:
-                    logger.debug(f"Mod {name} ({steamid}) already present.")
+                    try:
+                        # compare remote update time vs local mtime (both UTC)
+                        remote_dt = self.steam.get_last_update_date(steamid)
+                        if remote_dt:
+                            local_dt = datetime.utcfromtimestamp(mod_path.stat().st_mtime)
+                            if remote_dt > local_dt:
+                                need_download = True
+                                logger.info(f"Mod {name} ({steamid}) outdated: remote {remote_dt} > local {local_dt}")
+                            else:
+                                logger.debug(f"Mod {name} ({steamid}) is up-to-date.")
+                        else:
+                            # optional: fall back to metadata stored from previous downloads
+                            meta = self._meta.get(str(steamid))
+                            if meta and meta.get("last_update_remote"):
+                                local_dt = datetime.utcfromtimestamp(mod_path.stat().st_mtime)
+                                remote_epoch = meta.get("last_update_remote")
+                                from datetime import datetime as _dt
+                                remote_dt_meta = _dt.utcfromtimestamp(remote_epoch)
+                                if remote_dt_meta > local_dt:
+                                    need_download = True
+                                    logger.info(f"Mod {name} ({steamid}) outdated by stored meta: remote {remote_dt_meta} > local {local_dt}")
+                                else:
+                                    logger.debug(f"Mod {name} ({steamid}) up-to-date according to stored meta.")
+                            else:
+                                logger.debug(f"No remote update date for {steamid}; skipping remote check.")
+                    except Exception as e:
+                        logger.debug(f"Error checking update date for {steamid}: {e}")
+                if need_download:
+                    mods_to_download.append((name, steamid))
 
         # Download missing mods
+        from time import time
         for name, steamid in mods_to_download:
-            logger.debug(f"steam download {steamid} ({name})")
-            #self.steam.download_mod(steamid)
+            ok = self.steam.download_mod(steamid)
+            if ok:
+                # try to get remote update date; if unavailable store download time
+                try:
+                    remote_dt = self.steam.get_last_update_date(steamid)
+                    if remote_dt:
+                        remote_epoch = int(remote_dt.timestamp())
+                    else:
+                        remote_epoch = int(time())
+                except Exception:
+                    remote_epoch = int(time())
+                self._meta[str(steamid)] = {
+                    "last_update_remote": remote_epoch,
+                    "last_download": int(time())
+                }
+                self._save_meta()
+            else:
+                logger.warning(f"Download failed for {steamid}, metadata not updated.")
 
         # Link all mods into Arma directories
         self._link_all_mods()
@@ -145,8 +196,6 @@ class ModManager:
         
         defaults_mods = defaults.get("mods", {})
         active_mods = active.get("mods", {})
-        logger.debug(f"defaults_mods: {defaults_mods}")
-        logger.debug(f"active_mods: {active_mods}")
         logger.debug(f"defaults: {defaults}")
         logger.debug(f"active: {active}")
         # start with defaults, then extend with active
@@ -214,5 +263,52 @@ class ModManager:
             combined.append(entry)
         effective["missionMods"] = combined        
         effective.pop("baseMods", None)
-
+        logger.debug(f"effective mods: {effective}")
         return effective
+
+    def _meta_path(self) -> Path:
+        # kept for backward-compat / compatibility but not used for storage anymore
+        return self.workshop_dir / ".mods-meta.json"
+ 
+    def _load_meta(self) -> dict:
+        """
+        Load per-mod metadata files from each mod folder:
+        workshop_dir/<steamid>/.modmeta.json
+        """
+        import json
+        meta = {}
+        try:
+            if not self.workshop_dir.exists():
+                return {}
+            for p in self.workshop_dir.glob("*/.modmeta.json"):
+                try:
+                    sid = p.parent.name
+                    with p.open("r", encoding="utf-8") as fh:
+                        data = json.load(fh)
+                    meta[str(sid)] = data
+                except Exception as e:
+                    logger.debug(f"Failed to load per-mod meta {p}: {e}")
+        except Exception as e:
+            logger.debug(f"Failed to scan workshop dir for mod meta: {e}")
+        return meta
+ 
+    def _save_meta(self):
+        """
+        Persist metadata by writing a .modmeta.json into each mod folder.
+        Entries in self._meta are expected keyed by steamid (string).
+        """
+        import json
+        try:
+            for sid, data in list(self._meta.items()):
+                try:
+                    mod_dir = self.workshop_dir / str(sid)
+                    mod_dir.mkdir(parents=True, exist_ok=True)
+                    p = mod_dir / ".modmeta.json"
+                    tmp = p.with_suffix(".tmp")
+                    with tmp.open("w", encoding="utf-8") as fh:
+                        json.dump(data, fh, indent=2, ensure_ascii=False)
+                    tmp.replace(p)
+                except Exception as e:
+                    logger.error(f"Failed to write per-mod meta for {sid}: {e}")
+        except Exception as e:
+            logger.error(f"Failed to save mod meta: {e}")
