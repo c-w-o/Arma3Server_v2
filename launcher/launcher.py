@@ -11,6 +11,7 @@ from arma_launcher.mods import ModManager
 from arma_launcher.server import ServerLauncher
 from arma_launcher.steam import SteamCMD
 from arma_launcher.setup import ArmaSetup
+from arma_launcher.config_generator import generate_for_config
 
 def main():
     # --- Initialize logging ---
@@ -32,6 +33,13 @@ def main():
         setup.prepare_environment()
     except Exception as e:
         logger.exception(f"Environment setup failed: {e}")
+        sys.exit(1)
+
+    # --- Generate server config from server.json/schema (must exist in config dir now) ---
+    try:
+        generate_for_config(config)
+    except Exception as e:
+        logger.exception(f"Generating a3server.cfg failed: {e}")
         sys.exit(1)
 
     # --- Handle mods and workshop ---

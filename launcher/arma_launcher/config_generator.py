@@ -3,6 +3,7 @@ import os
 import sys
 import logging
 from jsonschema import validate, ValidationError
+from pathlib import Path
 from arma_launcher.log import get_logger
 
 logger = get_logger()
@@ -12,18 +13,15 @@ try:
 except ModuleNotFoundError:
     json5 = None
 
-SCHEMA_FILE = "/arma3/config/server_schema.json"
-SERVER_JSON = "/arma3/config/server.json"
-OUTPUT_CFG = "/arma3/config/generated_a3server.cfg"
 
-
-def load_json(path):
+def load_json(path: Path):
     """Load JSON file; prefer json5 if available to allow comments/trailing commas."""
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(path)
     with open(path, "r", encoding="utf-8") as f:
         if json5:
-            # json5.load handles comments and trailing commas
             return json5.load(f)
-        # fallback to stdlib json
         return json.load(f)
 
 
@@ -81,6 +79,48 @@ def generate_a3server_cfg(merged):
 
     return "\n".join(cfg)
 
+
+def generate_for_config(cfg, schema_path: Path = None, output_name: str = "generated_a3server.cfg") -> None:
+    """
+    Generate the a3server.cfg using an ArmaConfig instance.
+    - cfg: ArmaConfig instance (provides cfg.config_dir)
+    - schema_path: optional Path to schema; defaults to cfg.config_dir / "server_schema.json"
+    - output_name: filename to write inside cfg.config_dir
+    Raises exceptions on fatal errors.
+    """
+    logger = get_logger().getChild("config_generator")
+    config_dir = Path(cfg.config_dir)
+    server_json = config_dir / "server.json"
+    schema_file = Path(schema_path) if schema_path else (config_dir / "server_schema.json")
+    output_cfg = config_dir / output_name
+
+    logger.info("Generating a3server.cfg from %s (schema=%s)", server_json, schema_file)
+
+    # load & validate
+    config = load_json(server_json)
+    schema = load_json(schema_file)
+
+    ok, error = validate_config(config, schema)
+    if not ok:
+        logger.error("Validation failed: %s", error)
+        raise ValueError(error)
+
+    if "config-name" not in config:
+        raise ValueError("Missing 'config-name' in server.json")
+    if "configs" not in config or not isinstance(config["configs"], dict):
+        raise ValueError("Missing/invalid 'configs' object in server.json")
+    if config["config-name"] not in config["configs"]:
+        raise ValueError(f"Active config '{config['config-name']}' not found in 'configs'")
+
+    merged = merge_defaults(config)
+    cfg_text = generate_a3server_cfg(merged)
+
+    # write output
+    output_cfg.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_cfg, "w", encoding="utf-8") as fh:
+        fh.write(cfg_text)
+
+    logger.info("Wrote %s", output_cfg)
 
 
 def main():
