@@ -76,8 +76,25 @@ def generate_a3server_cfg(merged):
     # Admin Steam IDs (falls angegeben)
     admins = merged.get("admins", [])
     if admins:
-        ids = ", ".join(f'"{s}"' for s in admins)
-        cfg.append(f'admins[] = {{{ids}}};')
+        # Build multiline admins[] block:
+        lines = []
+        for i, a in enumerate(admins):
+            # allow either plain steamid strings or dicts like {"name": "...", "steamid": "..."
+            if isinstance(a, dict):
+                sid = a.get("steamid") or a.get("id") or a.get("steam_id")
+                name = a.get("name")
+            else:
+                sid = str(a)
+                name = None
+            if not sid:
+                # skip invalid entries
+                continue
+            comma = "," if i != len(admins) - 1 else ""
+            comment = f" // {name}" if name else ""
+            lines.append(f'    "{sid}"{comma}{comment}')
+        cfg.append("admins[] = {")
+        cfg.extend(lines)
+        cfg.append("};")
 
     # Headless clients
     hc_count = merged.get("numHeadless", 0)
