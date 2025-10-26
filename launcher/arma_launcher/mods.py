@@ -7,6 +7,7 @@ Handles mod linking, SteamCMD updates, key copying, and workshop synchronization
 import os
 import glob
 import shutil
+import json
 from pathlib import Path
 from arma_launcher.log import get_logger
 
@@ -31,7 +32,7 @@ class ModManager:
 
         # Resolve effective mod lists by merging defaults + active config and removing minus-mods
         effective = self._get_effective_mod_lists()
-        logger.debug(f"modlist: {effective}")
+        
         mods_to_download = []
         # consider all mod categories for download
         for key, modlist in effective.items():
@@ -148,11 +149,22 @@ class ModManager:
                 if name and isinstance(configs, dict):
                     active = configs.get(name)
 
+        # --- DEBUG: dump what's actually in the config ---
+        try:
+            raw_cfg = self.cfg if isinstance(self.cfg, dict) else getattr(self.cfg, "__dict__", self.cfg)
+            logger.debug("Config type=%s", type(self.cfg))
+            logger.debug("Raw config: %s", json.dumps(raw_cfg, default=str, indent=2))
+        except Exception as e:
+            logger.debug("Could not JSON-dump raw cfg: %s", e)
+
         defaults_mods = _get(defaults, "mods", {}) or {}
         active_mods = _get(active, "mods", {}) or {}
+        logger.debug("defaults.mods: %s", json.dumps(defaults_mods, default=str))
+        logger.debug("active.mods: %s", json.dumps(active_mods, default=str))
 
         # start with defaults, then extend with active
         keys = set(list(defaults_mods.keys()) + list(active_mods.keys()))
+        logger.debug("Effective mod keys found: %s", keys)
         effective = {}
         for k in keys:
             dlist = defaults_mods.get(k, []) if isinstance(defaults_mods, dict) else []
@@ -196,5 +208,25 @@ class ModManager:
         # ensure common keys exist
         for req in ("serverMods", "baseMods", "clientMods", "missionMods", "maps"):
             effective.setdefault(req, [])
+
+        # --- NEW: combine baseMods + missionMods into missionMods and deduplicate ---
+        combined_src = effective.get("baseMods", []) + effective.get("missionMods", [])
+        combined = []
+        seen = set()
+        for entry in combined_src:
+            try:
+                ename = str(entry[0])
+                esid = str(entry[1]) if entry[1] is not None else None
+            except Exception:
+                # fallback for non-pair entries
+                ename = str(entry)
+                esid = None
+            key = (ename, esid)
+            if key in seen:
+                continue
+            seen.add(key)
+            combined.append(entry)
+        effective["missionMods"] = combined        
+        effective.pop("baseMods", None)
 
         return effective
