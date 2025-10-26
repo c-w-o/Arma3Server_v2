@@ -1,0 +1,196 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Arma 3 Server Configuration Schema (Redshirt Edition)",
+  "type": "object",
+  "required": ["config-name", "defaults", "configs"],
+  "additionalProperties": false,
+
+  "properties": {
+    "config-name": {
+      "type": "string",
+      "description": "Name der aktiven Konfiguration (muss unter 'configs' existieren)"
+    },
+
+    "defaults": {
+      "type": "object",
+      "required": [
+        "maxPlayers",
+        "hostname",
+        "adminPassword",
+        "serverCommandPassword",
+        "mods"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "maxPlayers": { "type": "integer", "minimum": 1 },
+        "hostname": { "type": "string" },
+        "password": { "type": "string" },
+        "serverPassword": { "type": "string" },
+        "adminPassword": { "type": "string" },
+        "serverCommandPassword": { "type": "string" },
+
+        "admins": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "steamid"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "steamid": {
+                "type": "string",
+                "pattern": "^[0-9]{17}$",
+                "description": "SteamID64 (17-stellige Zahl)"
+              }
+            }
+          }
+        },
+
+        "autoInit": { "type": "boolean" },
+        "bandwidthAlg": { "type": "integer", "minimum": 0 },
+        "filePatching": { "type": "boolean" },
+        "limitFPS": { "type": "integer", "minimum": 1 },
+        "enableHT": { "type": "boolean" },
+        "useOCAP": { "type": "boolean" },
+        "numHeadless": { "type": "integer", "minimum": 0 },
+        "world": { "type": "string" },
+        "difficulty": { "type": "string" },
+
+        "params": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+
+        "missions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "autoStart": { "type": "boolean" },
+              "difficulty": { "type": "string" }
+            }
+          }
+        },
+
+        "mods": {
+          "type": "object",
+          "required": ["serverMods", "baseMods", "clientMods", "maps"],
+          "additionalProperties": false,
+          "properties": {
+            "serverMods": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/modEntry" }
+            },
+            "baseMods": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/modEntry" }
+            },
+            "clientMods": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/modEntry" }
+            },
+            "maps": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/modEntry" }
+            }
+          }
+        }
+      }
+    },
+
+    "configs": {
+      "type": "object",
+      "minProperties": 1,
+      "patternProperties": {
+        "^[A-Za-z0-9_.-]+$": {
+          "type": "object",
+          "required": ["hostname", "DLCs", "mods"],
+          "additionalProperties": false,
+          "properties": {
+            "description": { "type": "string" },
+            "hostname": { "type": "string" },
+            "password": { "type": "string" },
+            "useOCAP": { "type": "boolean" },
+            "numHeadless": { "type": "integer", "minimum": 0 },
+
+            "DLCs": {
+              "type": "object",
+              "required": ["contact", "csla", "gm", "vn", "ws", "spe"],
+              "additionalProperties": false,
+              "properties": {
+                "contact": { "type": "boolean" },
+                "csla": { "type": "boolean" },
+                "gm": { "type": "boolean" },
+                "vn": { "type": "boolean" },
+                "ws": { "type": "boolean" },
+                "spe": { "type": "boolean" }
+              }
+            },
+
+            "mods": {
+              "type": "object",
+              "required": ["serverMods", "missionMods", "clientMods", "maps"],
+              "additionalProperties": false,
+              "properties": {
+                "serverMods": {
+                  "type": "array",
+                  "items": { "$ref": "#/$defs/modEntry" }
+                },
+                "missionMods": {
+                  "type": "array",
+                  "items": { "$ref": "#/$defs/modEntry" }
+                },
+                "clientMods": {
+                  "type": "array",
+                  "items": { "$ref": "#/$defs/modEntry" }
+                },
+                "maps": {
+                  "type": "array",
+                  "items": { "$ref": "#/$defs/modEntry" }
+                }
+              }
+            },
+
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "extra": { "type": "string" }
+              }
+            },
+
+            "missions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["name"],
+                "additionalProperties": false,
+                "properties": {
+                  "name": { "type": "string" },
+                  "autoStart": { "type": "boolean" },
+                  "difficulty": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+
+  "$defs": {
+    "modEntry": {
+      "type": "array",
+      "prefixItems": [
+        { "type": "string", "minLength": 1 },
+        { "type": ["string", "null"], "pattern": "^[0-9]*$" }
+      ],
+      "minItems": 2,
+      "maxItems": 2
+    }
+  }
+}
