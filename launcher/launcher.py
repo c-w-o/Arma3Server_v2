@@ -5,7 +5,16 @@ Author: Don & ChatGPT Refactor
 """
 
 import sys
+import os
+# logger früh initialisieren, damit Module beim Import bereits korrekt loggen
 from arma_launcher.log import setup_logger, get_logger
+
+level = os.getenv("LOG_LEVEL", "INFO").upper()
+json_format = os.getenv("LOG_JSON", "false").lower() == "true"
+setup_logger(level=level, json_format=json_format)
+logger = get_logger()
+
+# jetzt die übrigen Module importieren (können während Import loggen)
 from arma_launcher.config import ArmaConfig
 from arma_launcher.mods import ModManager
 from arma_launcher.server import ServerLauncher
@@ -15,9 +24,7 @@ from arma_launcher.config_generator import generate_for_config
 
 def main():
     # --- Initialize logging ---
-    setup_logger()  # uses defaults or ENV-controlled options
-    logger = get_logger()
-
+    # setup_logger wurde bereits oben ausgeführt
     logger.info("=== Starting Arma 3 Dedicated Launcher ===")
 
     # --- Load environment & JSON config ---
