@@ -22,9 +22,8 @@
       ],
       "additionalProperties": false,
       "properties": {
-        "maxPlayers": { "type": "integer", "minimum": 1 },
+        "maxPlayers": { "type": "integer", "minimum": 1, "maximum": 32 },
         "hostname": { "type": "string" },
-        "password": { "type": "string" },
         "serverPassword": { "type": "string" },
         "adminPassword": { "type": "string" },
         "serverCommandPassword": { "type": "string" },
@@ -112,7 +111,7 @@
           "properties": {
             "description": { "type": "string" },
             "hostname": { "type": "string" },
-            "password": { "type": "string" },
+            "serverPassword": { "type": "string" },
             "useOCAP": { "type": "boolean" },
             "numHeadless": { "type": "integer", "minimum": 0 },
 
