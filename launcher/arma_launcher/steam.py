@@ -23,7 +23,7 @@ class SteamCMD:
         self.password = config.steam_password
 
     # ---------------------------------------------------------------------- #
-    def download_mod(self, steam_id: str, retries: int = 5, sleep_seconds: int = 60) -> bool:
+    def download_mod(self, steam_id: str, name: str, retries: int = 5, sleep_seconds: int = 60) -> bool:
         """
         Downloads or updates a mod from Steam Workshop using SteamCMD.
         Includes retry logic for rate limits and connection issues.
@@ -37,25 +37,55 @@ class SteamCMD:
         ]
 
         for attempt in range(1, retries + 1):
-            logger.info(f"Downloading mod {steam_id} (attempt {attempt}/{retries})...")
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-            output = result.stdout
+            logger.info(f"Downloading mod attempt {attempt}/{retries} of {steam_id} - {name}...")
+            # spawn steamcmd and stream output for progress reporting
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+            output_accum = []
+            last_percent = None
+            try:
+                # line-by-line streaming (works best when steamcmd flushes lines)
+                for line in proc.stdout:
+                    line = line.rstrip("\n")
+                    output_accum.append(line)
+                    # look for percentage patterns like "12%" or "12.3 %"
+                    m = re.search(r"(\d{1,3}(?:\.\d+)?)\s*%", line)
+                    if m:
+                        percent = m.group(1)
+                        # avoid spamming identical percents
+                        if percent != last_percent:
+                            logger.info(f"SteamCMD {steam_id} download: {percent}% — {line}")
+                            last_percent = percent
+                    else:
+                        # generic progress/info lines
+                        logger.debug(f"SteamCMD: {line}")
 
-            if self._is_rate_limited(output):
-                logger.warning("SteamCMD rate limited — sleeping for 3 minutes before retry.")
-                time.sleep(180)
-                continue
-            if self._is_timeout(output):
-                logger.warning("SteamCMD timeout detected — retrying in 60 seconds.")
+                proc.wait()
+                output = "\n".join(output_accum)
+
+                # detect common failure cases from accumulated output
+                if self._is_rate_limited(output):
+                    logger.warning("SteamCMD rate limited — sleeping for 3 minutes before retry.")
+                    time.sleep(180)
+                    continue
+                if self._is_timeout(output):
+                    logger.warning("SteamCMD timeout detected — retrying in 60 seconds.")
+                    time.sleep(sleep_seconds)
+                    continue
+
+                if proc.returncode == 0:
+                    logger.info(f"Mod {steam_id} successfully downloaded or up-to-date.")
+                    return True
+                else:
+                    logger.error(f"SteamCMD failed (code {proc.returncode}) for mod {steam_id}")
+                    logger.debug(f"SteamCMD output:\n{output}")
+                    time.sleep(sleep_seconds)
+            except Exception as e:
+                logger.exception(f"Error while running SteamCMD for {steam_id}: {e}")
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
                 time.sleep(sleep_seconds)
-                continue
-            if result.returncode == 0:
-                logger.info(f"Mod {steam_id} successfully downloaded or up-to-date.")
-                return True
-
-            logger.error(f"SteamCMD failed (code {result.returncode}) for mod {steam_id}")
-            logger.debug(f"SteamCMD output:\n{output}")
-            time.sleep(sleep_seconds)
 
         logger.error(f"Failed to download mod {steam_id} after {retries} attempts.")
         return False

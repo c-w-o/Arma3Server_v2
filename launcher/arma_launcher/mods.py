@@ -89,7 +89,7 @@ class ModManager:
         # Download missing mods
         from time import time
         for name, steamid in mods_to_download:
-            ok = self.steam.download_mod(steamid)
+            ok = self.steam.download_mod(steamid, name)
             if ok:
                 # try to get remote update date; if unavailable store download time
                 try:
