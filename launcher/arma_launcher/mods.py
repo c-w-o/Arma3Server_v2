@@ -54,7 +54,8 @@ class ModManager:
 
         # Download missing mods
         for name, steamid in mods_to_download:
-            self.steam.download_mod(steamid)
+            logger.debug(f"steam download {steamid} ({name})")
+            #self.steam.download_mod(steamid)
 
         # Link all mods into Arma directories
         self._link_all_mods()
@@ -126,33 +127,24 @@ class ModManager:
         then removing any entries mentioned in minus-mods.
         Returns a dict with keys like serverMods, baseMods, clientMods, missionMods, maps.
         """
-        def _get(obj, key, default=None):
-            # support both attribute-accessible config objects and plain dicts
-            if obj is None:
-                return default
-            if isinstance(obj, dict):
-                return obj.get(key, default)
-            return getattr(obj, key, default)
-
+        
         # try to obtain raw config structure (supporting either object or dict)
-        defaults = _get(self.cfg, "defaults", {}) or {}
-        logger.debug(f"xdefaults: {defaults}")
-        raw_cfg = self.cfg if isinstance(self.cfg, dict) else getattr(self.cfg, "__dict__", self.cfg)
-        logger.debug(f"ydefaults: {raw_cfg}")
-        active = None
+        json_data = getattr(self.cfg, "json_data", None)
+        if json_data is None:
+            logger.error("no \"json_data\" found or loaded in internal structure")
+            return {}
+        
+        defaults = json_data.get("defaults", {})
+        configs = json_data.get("configs", {})
+        active_name=json_data.get("config-name", None)
+        if active_name is None:
+            logger.error("no active setup selected")
+            return {}
+        active = configs.get(active_name, {})
         # try common places for active config
-        active = _get(self.cfg, "active", None) or _get(self.cfg, "active_config", None)
-        if active is None:
-            # if cfg exposes config-name and configs dict
-            cfg_dict = self.cfg if isinstance(self.cfg, dict) else getattr(self.cfg, "__dict__", None)
-            if isinstance(cfg_dict, dict):
-                name = cfg_dict.get("config-name") or cfg_dict.get("config_name")
-                configs = cfg_dict.get("configs")
-                if name and isinstance(configs, dict):
-                    active = configs.get(name)
-
-        defaults_mods = _get(defaults, "mods", {}) or {}
-        active_mods = _get(active, "mods", {}) or {}
+        
+        defaults_mods = defaults.get("mods", {})
+        active_mods = active.get("mods", {})
         logger.debug(f"defaults_mods: {defaults_mods}")
         logger.debug(f"active_mods: {active_mods}")
         logger.debug(f"defaults: {defaults}")
