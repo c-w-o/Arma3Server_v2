@@ -7,7 +7,6 @@ Handles mod linking, SteamCMD updates, key copying, and workshop synchronization
 import os
 import glob
 import shutil
-import json
 from pathlib import Path
 from arma_launcher.log import get_logger
 
@@ -149,22 +148,11 @@ class ModManager:
                 if name and isinstance(configs, dict):
                     active = configs.get(name)
 
-        # --- DEBUG: dump what's actually in the config ---
-        try:
-            raw_cfg = self.cfg if isinstance(self.cfg, dict) else getattr(self.cfg, "__dict__", self.cfg)
-            logger.debug("Config type=%s", type(self.cfg))
-            logger.debug("Raw config: %s", json.dumps(raw_cfg, default=str, indent=2))
-        except Exception as e:
-            logger.debug("Could not JSON-dump raw cfg: %s", e)
-
         defaults_mods = _get(defaults, "mods", {}) or {}
         active_mods = _get(active, "mods", {}) or {}
-        logger.debug("defaults.mods: %s", json.dumps(defaults_mods, default=str))
-        logger.debug("active.mods: %s", json.dumps(active_mods, default=str))
 
         # start with defaults, then extend with active
         keys = set(list(defaults_mods.keys()) + list(active_mods.keys()))
-        logger.debug("Effective mod keys found: %s", keys)
         effective = {}
         for k in keys:
             dlist = defaults_mods.get(k, []) if isinstance(defaults_mods, dict) else []
