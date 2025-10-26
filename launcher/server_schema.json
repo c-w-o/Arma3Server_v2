@@ -149,6 +149,10 @@
                 "maps": {
                   "type": "array",
                   "items": { "$ref": "#/$defs/modEntry" }
+                },
+                "minus-mods": {
+                  "type": "array",
+                  "items": { "$ref": "#/$defs/modEntry" }
                 }
               }
             },

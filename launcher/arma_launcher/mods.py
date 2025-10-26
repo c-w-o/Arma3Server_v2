@@ -29,13 +29,19 @@ class ModManager:
         """
         logger.info("Starting mod synchronization...")
 
+        # Resolve effective mod lists by merging defaults + active config and removing minus-mods
+        effective = self._get_effective_mod_lists()
+        logger.debug(f"modlist: {effective}")
         mods_to_download = []
-        for modlist, category in [
-            (getattr(self.cfg, "servermods", []), "servermods"),
-            (getattr(self.cfg, "mods", []), "mods"),
-            (getattr(self.cfg, "maps", []), "maps"),
-        ]:
-            for name, steamid in modlist:
+        # consider all mod categories for download
+        for key, modlist in effective.items():
+            for entry in modlist:
+                # expect entries as [name, steamid]
+                try:
+                    name, steamid = entry[0], entry[1]
+                except Exception:
+                    logger.debug("Skipping invalid mod entry (not a pair): %s", entry)
+                    continue
                 if not steamid:
                     logger.debug(f"Skipping non-Steam mod: {name}")
                     continue
@@ -58,19 +64,27 @@ class ModManager:
     # ---------------------------------------------------------------------- #
     def _link_all_mods(self):
         """Create symbolic links for mods and servermods from workshop."""
-        logger.debug("Linking all mods into /arma3/mods and /arma3/servermods...")
+        logger.debug("Linking all mods into %s and %s...", self.mods_dir, self.servermods_dir)
 
+        effective = self._get_effective_mod_lists()
         all_mods = []
-        for modlist, target_dir in [
-            (getattr(self.cfg, "servermods", []), self.servermods_dir),
-            (getattr(self.cfg, "mods", []), self.mods_dir),
-            (getattr(self.cfg, "maps", []), self.mods_dir),
-        ]:
-            for name, steamid in modlist:
+
+        # serverMods go to servermods_dir, everything else to mods_dir
+        for name, steamid in effective.get("serverMods", []):
+            if not steamid:
+                continue
+            src = self.workshop_dir / steamid
+            dst = self.servermods_dir / f"@{name}"
+            self._safe_link(src, dst)
+            self._copy_keys(src, name, steamid)
+            all_mods.append(dst)
+
+        for cat in ("baseMods", "clientMods", "missionMods", "maps"):
+            for name, steamid in effective.get(cat, []):
                 if not steamid:
                     continue
                 src = self.workshop_dir / steamid
-                dst = target_dir / f"@{name}"
+                dst = self.mods_dir / f"@{name}"
                 self._safe_link(src, dst)
                 self._copy_keys(src, name, steamid)
                 all_mods.append(dst)
@@ -104,3 +118,83 @@ class ModManager:
                 logger.debug(f"Copied key {target}")
             except Exception as e:
                 logger.error(f"Failed to copy key {key_file}: {e}")
+
+    # ---------------------------------------------------------------------- #
+    def _get_effective_mod_lists(self):
+        """
+        Build effective mod lists by merging defaults.mods with active config.mods,
+        then removing any entries mentioned in minus-mods.
+        Returns a dict with keys like serverMods, baseMods, clientMods, missionMods, maps.
+        """
+        def _get(obj, key, default=None):
+            # support both attribute-accessible config objects and plain dicts
+            if obj is None:
+                return default
+            if isinstance(obj, dict):
+                return obj.get(key, default)
+            return getattr(obj, key, default)
+
+        # try to obtain raw config structure (supporting either object or dict)
+        defaults = _get(self.cfg, "defaults", {}) or {}
+        active = None
+        # try common places for active config
+        active = _get(self.cfg, "active", None) or _get(self.cfg, "active_config", None)
+        if active is None:
+            # if cfg exposes config-name and configs dict
+            cfg_dict = self.cfg if isinstance(self.cfg, dict) else getattr(self.cfg, "__dict__", None)
+            if isinstance(cfg_dict, dict):
+                name = cfg_dict.get("config-name") or cfg_dict.get("config_name")
+                configs = cfg_dict.get("configs")
+                if name and isinstance(configs, dict):
+                    active = configs.get(name)
+
+        defaults_mods = _get(defaults, "mods", {}) or {}
+        active_mods = _get(active, "mods", {}) or {}
+
+        # start with defaults, then extend with active
+        keys = set(list(defaults_mods.keys()) + list(active_mods.keys()))
+        effective = {}
+        for k in keys:
+            dlist = defaults_mods.get(k, []) if isinstance(defaults_mods, dict) else []
+            alist = active_mods.get(k, []) if isinstance(active_mods, dict) else []
+            # ensure lists and shallow copy
+            effective[k] = list(dlist) + list(alist)
+
+        # collect minus-mods (from active only)
+        minus = active_mods.get("minus-mods", []) if isinstance(active_mods, dict) else []
+        if minus:
+            def _normalize(entry):
+                if isinstance(entry, (list, tuple)) and entry:
+                    return str(entry[0]), (str(entry[1]) if len(entry) > 1 else None)
+                if isinstance(entry, dict):
+                    return (entry.get("name"), entry.get("steamid"))
+                return (str(entry), None)
+
+            to_remove = [_normalize(m) for m in minus]
+
+            for k, lst in effective.items():
+                new_lst = []
+                for entry in lst:
+                    try:
+                        ename, esid = str(entry[0]), str(entry[1]) if entry[1] is not None else None
+                    except Exception:
+                        # keep invalid entries unchanged
+                        new_lst.append(entry)
+                        continue
+                    skip = False
+                    for rname, rsid in to_remove:
+                        if rname and ename == rname:
+                            skip = True
+                            break
+                        if rsid and esid == rsid:
+                            skip = True
+                            break
+                    if not skip:
+                        new_lst.append(entry)
+                effective[k] = new_lst
+
+        # ensure common keys exist
+        for req in ("serverMods", "baseMods", "clientMods", "missionMods", "maps"):
+            effective.setdefault(req, [])
+
+        return effective
