@@ -51,6 +51,16 @@ class ArmaConfig:
         self.steam_user = data.get("STEAM_USER", "")
         self.steam_password = data.get("STEAM_PASSWORD", "")
         self.skip_install = data.get("SKIP_INSTALL", "false").lower() == "true"
+
+        # fallback: load credentials from credentials file or alternate env vars
+        if not self.steam_user or not self.steam_password:
+            file_user, file_pass = _load_steam_credentials()
+            if file_user:
+                self.steam_user = file_user
+            if file_pass:
+                self.steam_password = file_pass
+            if self.steam_user or self.steam_password:
+                logger.info("Steam credentials loaded from fallback")
         
         def _safe_int(value, default, name=None):
             try:
