@@ -20,10 +20,12 @@ def _load_steam_credentials():
         try:
             with open(cfg_path, "r", encoding="utf-8") as fh:
                 data = json.load(fh)
+                logger.info("loaded steam credentials from file")
             return data.get("steam_user"), data.get("steam_password")
         except Exception:
             pass
     # fallback: environment variables (optional)
+    logger.warning("stream credentials file not found, try loading from environment")
     return os.environ.get("STEAM_USER"), os.environ.get("STEAM_PASSWORD")
 
 
