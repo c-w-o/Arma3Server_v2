@@ -137,6 +137,8 @@ class ModManager:
         # try to obtain raw config structure (supporting either object or dict)
         defaults = _get(self.cfg, "defaults", {}) or {}
         logger.debug(f"xdefaults: {defaults}")
+        raw_cfg = self.cfg if isinstance(self.cfg, dict) else getattr(self.cfg, "__dict__", self.cfg)
+        logger.debug(f"ydefaults: {raw_cfg}")
         active = None
         # try common places for active config
         active = _get(self.cfg, "active", None) or _get(self.cfg, "active_config", None)
