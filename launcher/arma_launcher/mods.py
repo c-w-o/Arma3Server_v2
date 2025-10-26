@@ -150,7 +150,8 @@ class ModManager:
 
         defaults_mods = _get(defaults, "mods", {}) or {}
         active_mods = _get(active, "mods", {}) or {}
-
+        logger.debug("defaults_mods: {defaults_mods}")
+        logger.debug("active_mods: {active_mods}")
         # start with defaults, then extend with active
         keys = set(list(defaults_mods.keys()) + list(active_mods.keys()))
         effective = {}
