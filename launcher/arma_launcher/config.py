@@ -18,6 +18,7 @@ def _load_steam_credentials():
     cfg_path = os.environ.get("ARMA_CONFIG_JSON", "/var/run/share/steam_credentials.json")
     if os.path.isfile(cfg_path):
         try:
+            logger.debug(f"opening {cfg_path} as credential file")
             with open(cfg_path, "r", encoding="utf-8") as fh:
                 data = json.load(fh)
                 logger.info("loaded steam credentials from file")
@@ -25,7 +26,7 @@ def _load_steam_credentials():
         except Exception:
             pass
     # fallback: environment variables (optional)
-    logger.warning("stream credentials file not found, try loading from environment")
+    logger.warning(f"stream credentials {cfg_path} file not found, try loading from environment")
     return os.environ.get("STEAM_USER"), os.environ.get("STEAM_PASSWORD")
 
 
