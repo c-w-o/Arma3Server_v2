@@ -20,6 +20,13 @@ class ArmaSetup:
         self.arma_root = config.arma_root
         self.common_share = Path("/var/run/share/arma3/server-common")
         self.this_share = Path("/var/run/share/arma3/this-server")
+        
+        self.this_server_mods = self.this_share / "mods"
+        self.this_mission_mods = self.this_share / "mods"
+        self.common_server_mods = self.common_share / "mods"
+        self.common_base_mods = self.common_share / "mods"
+        self.common_maps = self.common_share / "mods"
+        
 
     # ---------------------------------------------------------------------- #
     def prepare_environment(self):

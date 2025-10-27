@@ -24,14 +24,14 @@ class SteamCMD:
         self.password = config.steam_password
 
     # ---------------------------------------------------------------------- #
-    def download_mod(self, steam_id: str, name: str, retries: int = 5, sleep_seconds: int = 60) -> bool:
+    def download_mod(self, steam_id: str, name: str, path: str, retries: int = 5, sleep_seconds: int = 60) -> bool:
         """
         Downloads or updates a mod from Steam Workshop using SteamCMD.
         Includes retry logic for rate limits and connection issues.
         """
         cmd = [
             str(self.steam_root / "steamcmd.sh"),
-            "+force_install_dir", str(self.tmp_dir),
+            "+force_install_dir", path,
             "+login", self.user, self.password,
             "+workshop_download_item", "107410", str(steam_id), "validate",
             "+quit",

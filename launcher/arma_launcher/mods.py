@@ -84,12 +84,28 @@ class ModManager:
                     except Exception as e:
                         logger.debug(f"Error checking update date for {steamid}: {e}")
                 if need_download:
-                    mods_to_download.append((name, steamid))
+                    mods_to_download.append((name, steamid, key))
 
         # Download missing mods
         from time import time
-        for name, steamid in mods_to_download:
-            ok = self.steam.download_mod(steamid, name)
+        for name, steamid, key in mods_to_download:
+            path=None
+            if key == "maps":
+                path=self.common_maps
+            if key == "serverMods":
+                path=self.common_maps
+            if key == "clientMods":
+                path=self.common_base_mods
+            if key == "missionMods":
+                path=self.this_mission_mods
+            if key == "baseMods":
+                path=self.common_base_mods
+            
+            if path is None:
+                logger.warning(f"unknown mod key: {key}")
+                continue
+                
+            ok = self.steam.download_mod(steamid, name, path)
             if ok:
                 # try to get remote update date; if unavailable store download time
                 try:
