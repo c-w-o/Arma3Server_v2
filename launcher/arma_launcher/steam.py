@@ -68,7 +68,8 @@ class SteamCMD:
                             if any(m in output for m in filter_array):
                                 pass
                             elif "Downloading update" in output:
-                                with re.search(r'^\[\s*(\d{1,3}(?:\.\d+)?)%\]\s*.*\(\s*(\d+)\s+of\s+(\d+)\s+KB\s*\)', output) as m:
+                                m = re.search(r'^\[\s*(\d{1,3}(?:\.\d+)?)%\]\s*.*\(\s*(\d+)\s+of\s+(\d+)\s+KB\s*\)', output):
+                                if m:
                                     logger.info(f"[{m.group(1)}%] ({m.group(2)} / {m.group(3)} KiB)\r")
                             
                             if self._is_rate_limited(output):
