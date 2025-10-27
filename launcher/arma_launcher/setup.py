@@ -121,6 +121,7 @@ class ArmaSetup:
             links.append((missions, self.arma_root / "mpmissions"))
 
         for src, dst in links:
+            logger.debug(f"link {src} -> {dst}")
             self._safe_link(src, dst)
 
     # ---------------------------------------------------------------------- #

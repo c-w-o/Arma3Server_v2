@@ -42,7 +42,7 @@ def main():
         logger.exception(f"Environment setup failed: {e}")
         
         sys.exit(1)
-
+    sys.exit(1)
     # --- Generate server config from server.json/schema (must exist in config dir now) ---
     try:
         generate_for_config(config)
