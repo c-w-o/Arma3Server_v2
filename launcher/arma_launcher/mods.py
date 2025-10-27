@@ -37,7 +37,7 @@ class ModManager:
         
         if path is None:
             logger.warning(f"unknown mod key: {key}")
-            continue
+
         return path
     
     # ---------------------------------------------------------------------- #
