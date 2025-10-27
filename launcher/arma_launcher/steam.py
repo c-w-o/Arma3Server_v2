@@ -11,7 +11,6 @@ import re
 import select
 from pathlib import Path
 from arma_launcher.log import get_logger
-from steamcmd_wrapper import get_steamcmd_client
 
 logger = get_logger()
 
