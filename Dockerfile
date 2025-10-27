@@ -23,7 +23,7 @@ RUN apt-get update \
         wget \
         ca-certificates \
     && \
-    pip install json5 jsonschema\
+    pip install json5 jsonschema Py-SteamCMD-Subprocess-Wrapper\
     && \
     apt-get remove --purge -y \
     && \
