@@ -52,6 +52,15 @@ class ArmaConfig:
         self.steam_user = data.get("STEAM_USER", "")
         self.steam_password = data.get("STEAM_PASSWORD", "")
         self.skip_install = data.get("SKIP_INSTALL", "false").lower() == "true"
+        
+        self.common_share = Path("/var/run/share/arma3/server-common")
+        self.this_share = Path("/var/run/share/arma3/this-server")
+        
+        self.this_server_mods = self.this_share / "mods"
+        self.this_mission_mods = self.this_share / "mods"
+        self.common_server_mods = self.common_share / "mods"
+        self.common_base_mods = self.common_share / "mods"
+        self.common_maps = self.common_share / "mods"
 
         # fallback: load credentials from credentials file or alternate env vars
         if not self.steam_user or not self.steam_password:

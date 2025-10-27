@@ -17,15 +17,15 @@ logger = get_logger()
 class ArmaSetup:
     def __init__(self, config):
         self.cfg = config
-        self.arma_root = config.arma_root
-        self.common_share = Path("/var/run/share/arma3/server-common")
-        self.this_share = Path("/var/run/share/arma3/this-server")
+        #self.arma_root = config.arma_root
+        #self.common_share = Path("/var/run/share/arma3/server-common")
+        #self.this_share = Path("/var/run/share/arma3/this-server")
         
-        self.this_server_mods = self.this_share / "mods"
-        self.this_mission_mods = self.this_share / "mods"
-        self.common_server_mods = self.common_share / "mods"
-        self.common_base_mods = self.common_share / "mods"
-        self.common_maps = self.common_share / "mods"
+        #self.this_server_mods = self.this_share / "mods"
+        #self.this_mission_mods = self.this_share / "mods"
+        #self.common_server_mods = self.common_share / "mods"
+        #self.common_base_mods = self.common_share / "mods"
+        #self.common_maps = self.common_share / "mods"
         
 
     # ---------------------------------------------------------------------- #
@@ -53,9 +53,9 @@ class ArmaSetup:
         remove_dirs = []
         ignore_files = []
 
-        logger.debug(f"Cleaning up {self.arma_root} ...")
+        logger.debug(f"Cleaning up {self.cfg.arma_root} ...")
 
-        for item in self.arma_root.iterdir():
+        for item in self.cfg.arma_root.iterdir():
             if item.name in keep:
                 continue
             if item.is_symlink():
@@ -103,22 +103,22 @@ class ArmaSetup:
         logger.debug("Linking shared config directories and DLCs...")
 
         links = [
-            (self.this_share / "config", self.arma_root / "config"),
-            (self.this_share / "userconfig", self.arma_root / "userconfig"),
-            (self.this_share / "logs", self.arma_root / "logs"),
-            (self.common_share / "basic.cfg", self.arma_root / "basic.cfg"),
+            (self.cfg.this_share / "config", self.cfg.arma_root / "config"),
+            (self.cfg.this_share / "userconfig", self.cfg.arma_root / "userconfig"),
+            (self.cfg.this_share / "logs", self.cfg.arma_root / "logs"),
+            (self.cfg.common_share / "basic.cfg", self.cfg.arma_root / "basic.cfg"),
         ]
 
         # DLCs
-        dlc_path = self.common_share / "dlcs"
+        dlc_path = self.cfg.common_share / "dlcs"
         if dlc_path.exists():
             for dlc in dlc_path.iterdir():
-                links.append((dlc, self.arma_root / dlc.name))
+                links.append((dlc, self.cfg.arma_root / dlc.name))
 
         # mpmissions (optional)
-        missions = self.this_share / "mpmissions"
+        missions = self.cfg.this_share / "mpmissions"
         if missions.exists():
-            links.append((missions, self.arma_root / "mpmissions"))
+            links.append((missions, self.cfg.arma_root / "mpmissions"))
 
         for src, dst in links:
             self._safe_link(src, dst)

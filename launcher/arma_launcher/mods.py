@@ -22,7 +22,7 @@ class ModManager:
         self.servermods_dir = config.servermods_dir
         self.keys_dir = config.keys_dir
 
-    def resolve_path(self, key) -> str:
+    def resolve_path(self, key):
         path=None
         if key == "maps":
             path=self.common_maps
