@@ -11,6 +11,7 @@ import re
 import select
 from pathlib import Path
 from arma_launcher.log import get_logger
+from steamcmd_wrapper import get_steamcmd_client
 
 logger = get_logger()
 
@@ -41,95 +42,62 @@ class SteamCMD:
 
         for attempt in range(1, retries + 1):
             logger.info(f"Downloading mod attempt {attempt}/{retries} of {steam_id} - {name}...")
-            # spawn steamcmd and stream output for progress reporting
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
-            output_accum = []
-            last_percent = None
-            last_output_time = time.monotonic()
-            NO_OUTPUT_TIMEOUT = 60  # seconds without any output -> assume interactive prompt / stuck
             try:
-                # read with select so we can implement a no-output watchdog
-                stdout = proc.stdout
-                while True:
-                    # check if process ended and no more data
-                    if proc.poll() is not None:
-                        # drain any remaining lines
-                        for line in stdout:
-                            line = line.rstrip("\n")
-                            output_accum.append(line)
-                        break
+                with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1) as proc:
+                    try:
+                        # Stream output and look for transient error signals.
+                        for line in proc.stdout:
+                            output = line.strip()
+                            logger.debug(output)
+                            if self._is_rate_limited(output):
+                                logger.warning("SteamCMD rate limited — killing process and retrying after backoff.")
+                                try:
+                                    proc.kill()
+                                except Exception:
+                                    pass
+                                break
+                            if self._is_timeout(output):
+                                logger.warning("SteamCMD timeout detected — killing process and retrying after backoff.")
+                                try:
+                                    proc.kill()
+                                except Exception:
+                                    pass
+                                break
 
-                    rlist, _, _ = select.select([stdout], [], [], 1.0)
-                    if not rlist:
-                        # no new data this second -> check watchdog
-                        if (time.monotonic() - last_output_time) > NO_OUTPUT_TIMEOUT:
-                            logger.error("SteamCMD produced no output for %s seconds after login — likely waiting for Steam Guard / interactive input. Aborting.", NO_OUTPUT_TIMEOUT)
-                            # capture current accumulated output for debugging
+                        # Wait for process to exit (guard with timeout in case it hangs)
+                        try:
+                            returncode = proc.wait(timeout=30)
+                        except subprocess.TimeoutExpired:
+                            logger.warning("SteamCMD did not exit in time — killing and treating as failure for this attempt.")
                             try:
                                 proc.kill()
                             except Exception:
                                 pass
-                            output = "\n".join(output_accum)
-                            logger.debug("SteamCMD partial output:\n%s", output)
-                            return False
-                        continue
+                            returncode = proc.wait()
 
-                    # data available
-                    line = stdout.readline()
-                    if line == "":
-                        continue
-                    line = line.rstrip("\n")
-                    last_output_time = time.monotonic()
-                    output_accum.append(line)
+                        if returncode == 0:
+                            logger.info(f"Successfully downloaded/updated mod {steam_id} ({name}).")
+                            return True
+                        else:
+                            logger.debug(f"SteamCMD exited with code {returncode} on attempt {attempt} for {steam_id}.")
 
-                    # detect interactive prompts that require user input (Steam Guard / 2FA / captcha)
-                    low = line.lower()
-                    if "steam guard" in low or "authentication code" in low or "code from the steam app" in low or "please enter the" in low and ("code" in low or "steam" in low):
-                        logger.error("SteamCMD is asking for interactive authentication: %s", line)
+                    except Exception as e:
+                        logger.exception(f"Error while running SteamCMD for {steam_id}: {e}")
                         try:
                             proc.kill()
                         except Exception:
                             pass
-                        return False
 
-                    # look for percentage patterns like "12%" or "12.3 %"
-                    m = re.search(r"(\d{1,3}(?:\.\d+)?)\s*%", line)
-                    if m:
-                        percent = m.group(1)
-                        # avoid spamming identical percents
-                        if percent != last_percent:
-                            logger.info(f"SteamCMD {steam_id} download: {percent}% — {line}")
-                            last_percent = percent
-                    else:
-                        # generic progress/info lines
-                        logger.debug(f"SteamCMD: {line}")
-
-                output = "\n".join(output_accum)
-
-                # detect common failure cases from accumulated output
-                if self._is_rate_limited(output):
-                    logger.warning("SteamCMD rate limited — sleeping for 3 minutes before retry.")
-                    time.sleep(180)
-                    continue
-                if self._is_timeout(output):
-                    logger.warning("SteamCMD timeout detected — retrying in 60 seconds.")
-                    time.sleep(sleep_seconds)
-                    continue
-
-                if proc.returncode == 0:
-                    logger.info(f"Mod {steam_id} successfully downloaded or up-to-date.")
-                    return True
-                else:
-                    logger.error(f"SteamCMD failed (code {proc.returncode}) for mod {steam_id}")
-                    logger.debug(f"SteamCMD output:\n{output}")
-                    time.sleep(sleep_seconds)
+            except FileNotFoundError:
+                logger.error("steamcmd executable not found at %s", self.steam_root)
+                break
             except Exception as e:
-                logger.exception(f"Error while running SteamCMD for {steam_id}: {e}")
-                try:
-                    proc.kill()
-                except Exception:
-                    pass
-                time.sleep(sleep_seconds)
+                logger.exception(f"Failed to start SteamCMD for {steam_id}: {e}")
+
+            # exponential backoff (capped)
+            backoff = min(sleep_seconds * (2 ** (attempt - 1)), 600)
+            logger.info(f"Waiting {backoff}s before next attempt for {steam_id}.")
+            time.sleep(backoff)
 
         logger.error(f"Failed to download mod {steam_id} after {retries} attempts.")
         return False

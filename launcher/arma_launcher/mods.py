@@ -22,6 +22,24 @@ class ModManager:
         self.servermods_dir = config.servermods_dir
         self.keys_dir = config.keys_dir
 
+    def resolve_path(self, key) -> str:
+        path=None
+        if key == "maps":
+            path=self.common_maps
+        if key == "serverMods":
+            path=self.common_maps
+        if key == "clientMods":
+            path=self.common_base_mods
+        if key == "missionMods":
+            path=self.this_mission_mods
+        if key == "baseMods":
+            path=self.common_base_mods
+        
+        if path is None:
+            logger.warning(f"unknown mod key: {key}")
+            continue
+        return path
+    
     # ---------------------------------------------------------------------- #
     def sync(self) -> bool:
         """
@@ -49,7 +67,11 @@ class ModManager:
                 if not steamid:
                     logger.debug(f"Skipping non-Steam mod: {name}")
                     continue
-                mod_path = self.workshop_dir / steamid
+                #mod_path = self.workshop_dir / steamid
+                mod_path = self.resolve_path(key)
+                if mod_path is None:
+                    continue
+                mod_path = mod_path / steamid
                 # If missing -> download. If present, compare workshop last update date with local mtime.
                 need_download = False
                 if not mod_path.exists():
@@ -84,28 +106,13 @@ class ModManager:
                     except Exception as e:
                         logger.debug(f"Error checking update date for {steamid}: {e}")
                 if need_download:
-                    mods_to_download.append((name, steamid, key))
+                    mods_to_download.append((name, steamid, mod_path))
 
         # Download missing mods
         from time import time
-        for name, steamid, key in mods_to_download:
-            path=None
-            if key == "maps":
-                path=self.common_maps
-            if key == "serverMods":
-                path=self.common_maps
-            if key == "clientMods":
-                path=self.common_base_mods
-            if key == "missionMods":
-                path=self.this_mission_mods
-            if key == "baseMods":
-                path=self.common_base_mods
-            
-            if path is None:
-                logger.warning(f"unknown mod key: {key}")
-                continue
-                
-            ok = self.steam.download_mod(steamid, name, path)
+        for name, steamid, mod_path in mods_to_download:
+               
+            ok = self.steam.download_mod(steamid, name, mod_path)
             if ok:
                 # try to get remote update date; if unavailable store download time
                 try:
