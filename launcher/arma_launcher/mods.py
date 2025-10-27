@@ -25,15 +25,15 @@ class ModManager:
     def resolve_path(self, key):
         path=None
         if key == "maps":
-            path=self.common_maps
+            path=self.cfg.common_maps
         if key == "serverMods":
-            path=self.common_maps
+            path=self.cfg.common_maps
         if key == "clientMods":
-            path=self.common_base_mods
+            path=self.cfg.common_base_mods
         if key == "missionMods":
-            path=self.this_mission_mods
+            path=self.cfg.this_mission_mods
         if key == "baseMods":
-            path=self.common_base_mods
+            path=self.cfg.common_base_mods
         
         if path is None:
             logger.warning(f"unknown mod key: {key}")
