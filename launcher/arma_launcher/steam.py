@@ -29,6 +29,23 @@ class SteamCMD:
         Downloads or updates a mod from Steam Workshop using SteamCMD.
         Includes retry logic for rate limits and connection issues.
         """
+        
+        filter_array=[
+            "Redirecting stderr to",
+            "ILocalize::AddFile()",
+            "WARNING: setlocale(",
+            "Logging directory:",
+            "UpdateUI: ",
+            "Restarting steamcmd by",
+            "Steam Console Client ",
+            "type 'quit'",
+            "Loading Steam API",
+            "Logging in using",
+            "Logging in user",
+            "Waiting for client config",
+            "aiting for user info",
+        ]
+        
         cmd = [
             str(self.steam_root / "steamcmd.sh"),
             "+force_install_dir", path,
@@ -44,10 +61,16 @@ class SteamCMD:
             try:
                 with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1) as proc:
                     try:
+                        
                         # Stream output and look for transient error signals.
                         for line in proc.stdout:
                             output = line.strip()
-                            logger.debug(output)
+                            if any(m in output for m in filter_array):
+                                pass
+                            elif "Downloading update" in output:
+                                with re.search(r'^\[\s*(\d{1,3}(?:\.\d+)?)%\]\s*.*\(\s*(\d+)\s+of\s+(\d+)\s+KB\s*\)', output) as m:
+                                    logger.info(f"[{m.group(1)}%] ({m.group(2)} / {m.group(3)} KiB)\r")
+                            
                             if self._is_rate_limited(output):
                                 logger.warning("SteamCMD rate limited — killing process and retrying after backoff.")
                                 try:
