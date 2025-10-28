@@ -64,11 +64,11 @@ class SteamCMD:
             dst_path=path
             
             if not os.path.exists(dst_path):
-                logger.info(f"linking {src_path} to {dst_path}")
-                os.makedirs(src_path)
-                os.symlink(src_path, dst_path)
+                logger.info(f"linking {dst_path} to {src_path}")
+                os.makedirs(dst_path)
+                os.symlink(dst_path, src_path)
             else:
-                logger.debug(f"link from {src_path} to {dst_path} exists")
+                logger.debug(f"link from {dst_path} to {src_path} exists")
             try:
                 with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1) as proc:
                     try:
