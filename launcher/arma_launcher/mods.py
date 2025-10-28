@@ -28,7 +28,7 @@ class ModManager:
         self.this_mission_mods = self.cfg.this_share
         self.common_server_mods = self.cfg.common_share
         self.common_base_mods = self.cfg.common_share
-        self.common_maps = self.cfg.common_share
+        self.common_maps = self.cfg.common_maps
 
     def resolve_path(self, key):
         path=None
