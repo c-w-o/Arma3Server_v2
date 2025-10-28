@@ -110,7 +110,7 @@ class ModManager:
                     self._normalize_mod_case(mod_path)
                 except Exception as e:
                     logger.warning(f"Case-normalization failed for {mod_path}: {e}")
-                 self.steam.set_local_update_time(mod_path, steamid, name, remote_dt)
+                self.steam.set_local_update_time(mod_path, steamid, name, remote_dt)
             else:
                 logger.warning(f"Download failed for {steamid}, metadata not updated.")
 
