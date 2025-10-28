@@ -23,6 +23,12 @@ class ModManager:
         self.keys_dir = config.keys_dir
         # extensions to force to lower-case (can be overridden in config as 'normalize_exts')
         self.normalize_exts = getattr(config, "normalize_exts", [".pbo", ".paa", ".sqf"])
+        
+        self.this_server_mods = self.cfg.this_share
+        self.this_mission_mods = self.cfg.this_share
+        self.common_server_mods = self.cfg.common_share
+        self.common_base_mods = self.cfg.common_share
+        self.common_maps = self.cfg.common_share
 
     def resolve_path(self, key):
         path=None
@@ -126,25 +132,19 @@ class ModManager:
 
         effective = self._get_effective_mod_lists()
         all_mods = []
-
-        # serverMods go to servermods_dir, everything else to mods_dir
-        for name, steamid in effective.get("serverMods", []):
-            if not steamid:
-                continue
-            src = self.workshop_dir / steamid
-            dst = self.servermods_dir / f"@{name}"
-            self._safe_link(src, dst)
-            self._copy_keys(src, name, steamid)
-            all_mods.append(dst)
-
-        for cat in ("baseMods", "clientMods", "missionMods", "maps"):
-            for name, steamid in effective.get(cat, []):
-                if not steamid:
+        for key, modlist in effective.items():
+            for name, steamid in modlist:
+                mod_path = self.resolve_path(key)
+                if mod_path is None:
                     continue
-                src = self.workshop_dir / steamid
-                dst = self.mods_dir / f"@{name}"
-                self._safe_link(src, dst)
-                self._copy_keys(src, name, steamid)
+                mod_path = mod_path / steamid
+                if key=="serverMods" or key=="extraServer":
+                    dst = self.servermods_dir / f"@{name}"
+                else:
+                    dst = self.mods_dir / f"@{name}"
+                self._safe_link(mod_path, dst)
+                self._normalize_mod_case(mod_path)
+                self._copy_keys(mod_path, name, steamid)
                 all_mods.append(dst)
 
         logger.info(f"Linked total {len(all_mods)} mods.")
