@@ -101,7 +101,7 @@ class ModManager:
             if ok:
                 # try to get remote update date; if unavailable store download time
                 remote_dt = self.steam.get_last_update_date(steamid)
-                self.steam.set_local_update_time(mod_path, steamid, remote_dt)
+                self.steam.set_local_update_time(mod_path, steamid, name, remote_dt)
             else:
                 logger.warning(f"Download failed for {steamid}, metadata not updated.")
 
