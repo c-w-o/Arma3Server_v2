@@ -19,9 +19,11 @@ class SteamCMD:
     def __init__(self, config):
         self.cfg = config
         self.steam_root = Path("/steamcmd")
-        self.tmp_dir = Path("/tmp")
+        self.tmp_dir = self.cfg.tmp_dir
+        self.workshop_dir=self.tmp_dir / "steamapps/workshop/content/107410"
         self.user = config.steam_user
         self.password = config.steam_password
+        
 
     # ---------------------------------------------------------------------- #
     def download_mod(self, steam_id: str, name: str, path: str, retries: int = 5, sleep_seconds: int = 60) -> bool:
@@ -48,7 +50,7 @@ class SteamCMD:
         
         cmd = [
             str(self.steam_root / "steamcmd.sh"),
-            "+force_install_dir", path,
+            "+force_install_dir", self.tmp_dir,
             "+login", self.user, self.password,
             "+workshop_download_item", "107410", str(steam_id), "validate",
             "+quit",
@@ -58,6 +60,14 @@ class SteamCMD:
 
         for attempt in range(1, retries + 1):
             logger.info(f"Downloading mod attempt {attempt}/{retries} of {steam_id} - {name}...")
+            src_path=self.workshop_dir / steam_id
+            dst_path=path / steam_id
+            
+            if not os.path.exists(dst_path):
+                logger.info(f"linking {src_path} to {dst_path}")
+                os.symlink(src_path, dst_path)
+            else:
+                logger.debug(f"link from {src_path} to {dst_path} exists")
             try:
                 with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1) as proc:
                     try:

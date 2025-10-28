@@ -42,7 +42,7 @@ class ArmaConfig:
         self.mods_dir = self.arma_root / "mods"
         self.servermods_dir = self.arma_root / "servermods"
         self.keys_dir = self.arma_root / "keys"
-        self.tmp_dir = Path(data.get("TMP_DIR", "/tmp/steamapps/workshop/content/107410"))
+        self.tmp_dir = Path(data.get("TMP_DIR", "/tmp"))
 
         self.basic_config = data.get("BASIC_CONFIG", "basic.cfg")
         self.arma_config = data.get("ARMA_CONFIG", "server.cfg")
