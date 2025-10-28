@@ -8,7 +8,8 @@ import os
 import time
 import subprocess
 import re
-import select
+import json
+from datetime import datetime
 from pathlib import Path
 from arma_launcher.log import get_logger
 
@@ -145,16 +146,37 @@ class SteamCMD:
     def _is_timeout(output: str) -> bool:
         return "Timeout" in output or "Failed to connect" in output
 
+    def get_local_update_time(self, mod_path):
+        p=mod_path / ".modmeta.json"
+        if not os.path.exists(p):
+            return datetime.utcfromtimestamp(0)
+        try:
+            with p.open("r", encoding="utf-8") as fh:
+                data=json.load(fh)
+                return data.get("timestamp", datetime.utcfromtimestamp(0))
+        except:
+            datetime.utcfromtimestamp(0)
+            
+    def set_local_update_time(self, mod_path, steamid, name, dt):
+        p=mod_path / ".modmeta.json"
+        data={
+            "steamid":steamid,
+            "name":name,
+            "timestamp":dt,
+        }
+        
+        with p.open("w", encoding="utf-8") as fh:
+            json.dump(data, fh, indent=2, ensure_ascii=False)
+
     # ---------------------------------------------------------------------- #
     def get_last_update_date(self, steam_id: str):
         """
         Query Steam Web API (GetPublishedFileDetails) to get the last update timestamp.
         Falls das fehlschlägt, gibt None zurück.
         """
-        import json
         import urllib.request
         import urllib.parse
-        from datetime import datetime
+        
 
         url = "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/"
         post_data = urllib.parse.urlencode({
