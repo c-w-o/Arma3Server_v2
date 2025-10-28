@@ -153,6 +153,14 @@
                 "minus-mods": {
                   "type": "array",
                   "items": { "$ref": "#/$defs/modEntry" }
+                },
+                "extraServer": {
+                  "type": "array",
+                  "items": { "$ref": "#/$defs/modEntry" }
+                },
+                "extraMission": {
+                  "type": "array",
+                  "items": { "$ref": "#/$defs/modEntry" }
                 }
               }
             },
