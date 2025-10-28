@@ -61,7 +61,7 @@ class SteamCMD:
         for attempt in range(1, retries + 1):
             logger.info(f"Downloading mod attempt {attempt}/{retries} of {steam_id} - {name}...")
             src_path=self.workshop_dir / steam_id
-            dst_path=path / steam_id
+            dst_path=path
             logger.debug(f"test from {src_path} to {dst_path} exists")
             if not os.path.exists(dst_path):
                 logger.info(f"linking {src_path} to {dst_path}")
