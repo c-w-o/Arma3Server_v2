@@ -9,7 +9,7 @@ import time
 import subprocess
 import re
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from arma_launcher.log import get_logger
 
@@ -147,24 +147,54 @@ class SteamCMD:
         return "Timeout" in output or "Failed to connect" in output
 
     def get_local_update_time(self, mod_path):
-        p=mod_path / ".modmeta.json"
-        if not os.path.exists(p):
+        p = Path(mod_path) / ".modmeta.json"
+        if not p.exists():
             return datetime.utcfromtimestamp(0)
         try:
             with p.open("r", encoding="utf-8") as fh:
-                data=json.load(fh)
-                return data.get("timestamp", datetime.utcfromtimestamp(0))
-        except:
-            datetime.utcfromtimestamp(0)
-            
+                data = json.load(fh)
+            ts = data.get("timestamp")
+            if ts is None:
+                return datetime.utcfromtimestamp(0)
+            if isinstance(ts, (int, float)):
+                return datetime.utcfromtimestamp(int(ts))
+            if isinstance(ts, str):
+                # try numeric string first
+                try:
+                    return datetime.utcfromtimestamp(int(ts))
+                except Exception:
+                    # try ISO format (handle trailing Z)
+                    s = ts
+                    if s.endswith("Z"):
+                        s = s[:-1] + "+00:00"
+                    try:
+                        dt = datetime.fromisoformat(s)
+                        if dt.tzinfo is not None:
+                            dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+                        return dt
+                    except Exception:
+                        return datetime.utcfromtimestamp(0)
+            return datetime.utcfromtimestamp(0)
+        except Exception:
+            return datetime.utcfromtimestamp(0)
+
     def set_local_update_time(self, mod_path, steamid, name, dt):
-        p=mod_path / ".modmeta.json"
-        data={
-            "steamid":steamid,
-            "name":name,
-            "timestamp":dt,
+        p = Path(mod_path) / ".modmeta.json"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        # normalize dt to integer epoch seconds for JSON
+        if isinstance(dt, datetime):
+            ts = int(dt.timestamp())
+        else:
+            try:
+                ts = int(dt)
+            except Exception:
+                ts = int(datetime.utcnow().timestamp())
+        data = {
+            "steamid": steamid,
+            "name": name,
+            "timestamp": ts,
         }
-        
+
         with p.open("w", encoding="utf-8") as fh:
             json.dump(data, fh, indent=2, ensure_ascii=False)
 
