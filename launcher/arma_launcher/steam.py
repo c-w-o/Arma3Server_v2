@@ -62,9 +62,10 @@ class SteamCMD:
             logger.info(f"Downloading mod attempt {attempt}/{retries} of {steam_id} - {name}...")
             src_path=self.workshop_dir / steam_id
             dst_path=path
-            logger.debug(f"test from {src_path} to {dst_path} exists")
+            
             if not os.path.exists(dst_path):
                 logger.info(f"linking {src_path} to {dst_path}")
+                os.makedirs(src_path)
                 os.symlink(src_path, dst_path)
             else:
                 logger.debug(f"link from {src_path} to {dst_path} exists")
