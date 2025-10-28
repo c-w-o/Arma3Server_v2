@@ -74,7 +74,7 @@ class ModManager:
                 remote_dt = self.steam.get_last_update_date(steamid)
                 if not mod_path.exists():
                     need_download = True
-                    logger.info(f"Missing mod {name} ({steamid}) — queued for download.")
+                    logger.info(f"Missing mod {key} - {name} ({steamid}) — queued for download.")
                 else:
                     try:
                         # compare remote update time vs local mtime (both UTC)
@@ -84,9 +84,9 @@ class ModManager:
                             local_dt = self.steam.get_local_update_time(mod_path)
                             if remote_dt > local_dt:
                                 need_download = True
-                                logger.info(f"Mod {name} ({steamid}) outdated: remote {remote_dt} > local {local_dt}")
+                                logger.info(f"Mod {key} - {name} ({steamid}) outdated: remote {remote_dt} > local {local_dt}")
                             else:
-                                logger.debug(f"Mod {name} ({steamid}) is up-to-date.")
+                                logger.debug(f"Mod {key} - {name} ({steamid}) is up-to-date.")
                             
                     except Exception as e:
                         logger.debug(f"Error checking update date for {steamid}: {e}")
