@@ -29,7 +29,7 @@ class ServerLauncher:
         self.port = self.cfg.port
         self.profile = self.cfg.profile
         self.clients = self.cfg.headless_clients
-        self.basic_cfg = self.cfg.config_dir / self.cfg.basic_config
+        self.basic_cfg = self.cfg.common_share / self.cfg.basic_config
         self.param_cfg = self.cfg.config_dir / self.cfg.param_config
         self.server_cfg = self.cfg.config_dir / self.cfg.arma_config
 
