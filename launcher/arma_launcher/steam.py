@@ -187,7 +187,7 @@ class SteamCMD:
             str(self.steam_root / "steamcmd.sh"),
             "+force_install_dir", str(install_dir),
             "+login", self.user, self.password,
-            "+app_update", "107410", "validate",
+            "+app_update", "233780", "validate",
             "+quit",
         ]
         logger.info(f"Installing/updating Arma 3 to {install_dir}")
