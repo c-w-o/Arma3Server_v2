@@ -63,7 +63,7 @@ class ArmaConfig:
         self.common_share = Path("/var/run/share/arma3/server-common")
         self.this_share = Path("/var/run/share/arma3/this-server")
         
-        self.this_server_mods = self.this_share / "mods"
+        self.this_server_mods = self.this_share / "servermods"
         self.this_mission_mods = self.this_share / "mods"
         self.common_server_mods = self.common_share / "mods"
         self.common_base_mods = self.common_share / "mods"
@@ -117,7 +117,7 @@ class ArmaConfig:
             logger.warning(f"No matching config '{active_name}' found in server.json")
             return
 
-        self.use_ocap = active_cfg.get("use-ocap", False)
+        self.use_ocap = active_cfg.get("useOCAP", False)
         self.mods = active_cfg.get("mods", [])
         self.servermods = active_cfg.get("servermods", [])
         self.maps = active_cfg.get("maps", [])

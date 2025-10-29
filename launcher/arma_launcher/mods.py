@@ -156,6 +156,21 @@ class ModManager:
                 self._copy_keys(mod_path, name, steamid)
                 all_mods.append(dst)
 
+        if self.cfg.use_ocap:
+            name="@ocap"
+            srv_path=self.cfg.this_server_mods / name
+            mod_path=self.cfg.common_share / name
+            if not os.path.exists(srv_path):
+                shutil.copy2(str(srv_path), str(mod_path))
+            self._normalize_mod_case(mod_path)
+            self._copy_keys(mod_path, name, "0")
+            dst = self.servermods_dir / f"@{name}"
+            self._server_mod_names.append(f"@{name}")
+            self._safe_link(mod_path, dst)
+            all_mods.append(dst)
+            
+            
+        
         logger.info(f"Linked total {len(all_mods)} mods.")
 
     # ---------------------------------------------------------------------- #
