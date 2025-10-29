@@ -265,7 +265,6 @@ class ModManager:
             try:
                 target = self.keys_dir / f"{steamid}_{key_file.name}"
                 shutil.copy2(str(key_file), str(target))
-                logger.debug(f"Copied key {target}")
             except Exception as e:
                 logger.error(f"Failed to copy key {key_file}: {e}")
 

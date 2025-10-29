@@ -6,6 +6,7 @@ Author: Don & ChatGPT Refactor
 
 import sys
 import os
+from pathlib import Path
 # logger früh initialisieren, damit Module beim Import bereits korrekt loggen
 from arma_launcher.log import setup_logger, get_logger
 
@@ -43,6 +44,22 @@ def main():
         
         sys.exit(1)
     
+    # --- Ensure Arma is installed (optional via SteamCMD) ---
+    steam = SteamCMD(config)
+    arma_binary_env = os.getenv("ARMA_BINARY", "")
+    arma_path = Path(arma_binary_env) if arma_binary_env else (config.arma_root / "arma3server_x64")
+    if not arma_path.exists():
+        if config.skip_install:
+            logger.error("Arma binary not found and SKIP_INSTALL=true — cannot continue.")
+            sys.exit(1)
+        logger.info(f"Arma binary {arma_path} missing — attempting install/update via SteamCMD.")
+        if not steam.install_arma(str(config.arma_root)):
+            logger.error("Arma installation/update failed — exiting.")
+            sys.exit(1)
+        logger.info("Arma install/update finished.")
+    else:
+        logger.info(f"Arma binary present: {arma_path}")
+    
     # --- Generate server config from server.json/schema (must exist in config dir now) ---
     try:
         generate_for_config(config)
@@ -51,7 +68,6 @@ def main():
         sys.exit(1)
 
     # --- Handle mods and workshop ---
-    steam = SteamCMD(config)
     mods = ModManager(config, steam)
     if not mods.sync():
         logger.error("Mod synchronization failed — exiting.")

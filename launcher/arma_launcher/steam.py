@@ -9,7 +9,7 @@ import time
 import subprocess
 import re
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from arma_launcher.log import get_logger
 
@@ -21,69 +21,53 @@ class SteamCMD:
         self.cfg = config
         self.steam_root = Path("/steamcmd")
         self.tmp_dir = self.cfg.tmp_dir
-        self.workshop_dir=self.tmp_dir / "steamapps/workshop/content/107410"
+        self.workshop_dir = self.tmp_dir / "steamapps/workshop/content/107410"
         self.user = config.steam_user
         self.password = config.steam_password
-        
 
-    # ---------------------------------------------------------------------- #
-    def download_mod(self, steam_id: str, name: str, path: str, retries: int = 5, sleep_seconds: int = 60) -> bool:
+    def _steamcmd_run(self, cmd, filter_array=None, retries: int = 5, sleep_seconds: int = 60, per_try_timeout: int = 30) -> bool:
         """
-        Downloads or updates a mod from Steam Workshop using SteamCMD.
-        Includes retry logic for rate limits and connection issues.
+        Common runner for steamcmd invocations.
+        Streams output, applies filters, detects rate-limits/timeouts and performs retries with backoff.
+        Returns True on success (exitcode 0), False otherwise.
         """
         
-        filter_array=[
-            "Redirecting stderr to",
-            "ILocalize::AddFile()",
-            "WARNING: setlocale(",
-            "Logging directory:",
-            "UpdateUI: ",
-            "Restarting steamcmd by",
-            "Steam Console Client ",
-            "type 'quit'",
-            "Loading Steam API",
-            "Logging in using",
-            "Logging in user",
-            "Waiting for client config",
-            "aiting for user info",
-        ]
+        if filter is None:
+            filter_array = [
+                "Redirecting stderr to",
+                "ILocalize::AddFile()",
+                "WARNING: setlocale(",
+                "Logging directory:",
+                "UpdateUI: ",
+                "Restarting steamcmd by",
+                "Steam Console Client ",
+                "type 'quit'",
+                "Loading Steam API",
+                "Logging in using",
+                "Logging in user",
+                "Waiting for client config",
+                "aiting for user info",
+            ]
         
-        cmd = [
-            str(self.steam_root / "steamcmd.sh"),
-            "+force_install_dir", self.tmp_dir,
-            "+login", self.user, self.password,
-            "+workshop_download_item", "107410", str(steam_id), "validate",
-            "+quit",
-        ]
-        
-        logger.debug(f"STEAM CMD: {cmd}")
-
+        filter_array = filter_array or []
         for attempt in range(1, retries + 1):
-            logger.info(f"Downloading mod attempt {attempt}/{retries} of {steam_id} - {name}...")
-            src_path=self.workshop_dir / steam_id
-            dst_path=path
-            
-            if not os.path.exists(dst_path):
-                logger.info(f"linking {dst_path} to {src_path}")
-                os.makedirs(dst_path)
-                os.symlink(dst_path, src_path)
-            else:
-                logger.debug(f"link from {dst_path} to {src_path} exists")
+            logger.info(f"SteamCMD attempt {attempt}/{retries}: {' '.join(map(str, cmd))}")
             try:
                 with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1) as proc:
                     try:
-                        
-                        # Stream output and look for transient error signals.
                         for line in proc.stdout:
-                            output = line.strip()
+                            output = line.rstrip("\n")
+                            # skip noisey lines
                             if any(m in output for m in filter_array):
-                                pass
-                            elif "Downloading update" in output:
-                                m = re.search(r'^\[\s*(\d{1,3}(?:\.\d+)?)%\]\s*.*\(\s*(\d+)\s+of\s+(\d+)\s+KB\s*\)', output)
-                                if m:
-                                    logger.info(f"[{m.group(1)}%] ({m.group(2)} / {m.group(3)} KiB)\r")
-                            
+                                continue
+
+                            # progress/info routing
+                            if "Downloading update" in output or "Extracting" in output or "Success" in output:
+                                logger.info(output)
+                            else:
+                                logger.debug(output)
+
+                            # transient errors -> kill and retry
                             if self._is_rate_limited(output):
                                 logger.warning("SteamCMD rate limited — killing process and retrying after backoff.")
                                 try:
@@ -99,9 +83,9 @@ class SteamCMD:
                                     pass
                                 break
 
-                        # Wait for process to exit (guard with timeout in case it hangs)
+                        # Wait for process to exit (guard with timeout)
                         try:
-                            returncode = proc.wait(timeout=30)
+                            returncode = proc.wait(timeout=per_try_timeout)
                         except subprocess.TimeoutExpired:
                             logger.warning("SteamCMD did not exit in time — killing and treating as failure for this attempt.")
                             try:
@@ -111,31 +95,118 @@ class SteamCMD:
                             returncode = proc.wait()
 
                         if returncode == 0:
-                            logger.info(f"Successfully downloaded/updated mod {steam_id} ({name}).")
+                            logger.info("SteamCMD finished successfully.")
                             return True
                         else:
-                            logger.debug(f"SteamCMD exited with code {returncode} on attempt {attempt} for {steam_id}.")
-
+                            logger.debug(f"SteamCMD exited with code {returncode} (attempt {attempt}).")
                     except Exception as e:
-                        logger.exception(f"Error while running SteamCMD for {steam_id}: {e}")
+                        logger.exception(f"Error while running SteamCMD: {e}")
                         try:
                             proc.kill()
                         except Exception:
                             pass
-
             except FileNotFoundError:
                 logger.error("steamcmd executable not found at %s", self.steam_root)
-                break
+                return False
             except Exception as e:
-                logger.exception(f"Failed to start SteamCMD for {steam_id}: {e}")
+                logger.exception(f"Failed to start SteamCMD: {e}")
 
             # exponential backoff (capped)
             backoff = min(sleep_seconds * (2 ** (attempt - 1)), 600)
-            logger.info(f"Waiting {backoff}s before next attempt for {steam_id}.")
+            logger.info(f"Waiting {backoff}s before next SteamCMD attempt.")
             time.sleep(backoff)
 
-        logger.error(f"Failed to download mod {steam_id} after {retries} attempts.")
+        logger.error("SteamCMD failed after all retries.")
         return False
+
+    # ---------------------------------------------------------------------- #
+    def download_mod(self, steam_id: str, name: str, path: str, retries: int = 5, sleep_seconds: int = 60) -> bool:
+        """
+        Downloads or updates a mod from Steam Workshop using SteamCMD.
+        Uses shared runner to execute steamcmd and then ensures a symlink from mods dir -> workshop content.
+        """
+
+        cmd = [
+            str(self.steam_root / "steamcmd.sh"),
+            "+force_install_dir", str(self.tmp_dir),
+            "+login", self.user, self.password,
+            "+workshop_download_item", "107410", str(steam_id), "validate",
+            "+quit",
+        ]
+
+        success = self._steamcmd_run(cmd, retries=retries, sleep_seconds=sleep_seconds)
+        if not success:
+            logger.error(f"Failed to download mod {steam_id} ({name}).")
+            return False
+
+        # ensure workshop source exists and create symlink at desired path
+        src_path = self.workshop_dir / str(steam_id)
+        dst_path = Path(path)
+        if not src_path.exists():
+            logger.warning(f"Workshop content not found after download: {src_path}")
+        try:
+            dst_parent = dst_path.parent
+            dst_parent.mkdir(parents=True, exist_ok=True)
+            # remove existing destination if it's a broken symlink or file
+            if dst_path.exists() or dst_path.is_symlink():
+                try:
+                    if dst_path.is_dir() and not dst_path.is_symlink():
+                        logger.debug(f"Destination exists and is a real dir, leaving it: {dst_path}")
+                    else:
+                        dst_path.unlink()
+                except Exception:
+                    logger.debug(f"Could not remove existing destination {dst_path}")
+            # create symlink pointing to workshop content
+            if not dst_path.exists():
+                try:
+                    os.symlink(str(src_path), str(dst_path))
+                    logger.info(f"Linked {dst_path} -> {src_path}")
+                except FileExistsError:
+                    logger.debug(f"Symlink already exists: {dst_path}")
+                except OSError as e:
+                    logger.warning(f"Failed to create symlink {dst_path} -> {src_path}: {e}")
+        except Exception as e:
+            logger.exception(f"Error while linking mod {steam_id}: {e}")
+
+        # write local metadata timestamp
+        try:
+            remote_dt = self.get_last_update_date(steam_id)
+            if remote_dt:
+                self.set_local_update_time(dst_path, steam_id, name, remote_dt)
+        except Exception:
+            logger.debug("Ignoring failure to set local update time.")
+
+        return True
+
+    def install_arma(self, install_dir: str = None, retries: int = 3, sleep_seconds: int = 30) -> bool:
+        """
+        Install or update Arma 3 (app 107410) via SteamCMD.
+        """
+        install_dir = install_dir or str(self.cfg.arma_root)
+        cmd = [
+            str(self.steam_root / "steamcmd.sh"),
+            "+force_install_dir", str(install_dir),
+            "+login", self.user, self.password,
+            "+app_update", "107410", "validate",
+            "+quit",
+        ]
+        logger.info(f"Installing/updating Arma 3 to {install_dir}")
+        return self._steamcmd_run(cmd, retries=retries, sleep_seconds=sleep_seconds)
+
+    def install_app(self, appid: str, install_dir: str = None, retries: int = 3, sleep_seconds: int = 30) -> bool:
+        """
+        Generic app installer (useful for DLCs via appid).
+        """
+        install_dir = install_dir or str(self.tmp_dir)
+        cmd = [
+            str(self.steam_root / "steamcmd.sh"),
+            "+force_install_dir", str(install_dir),
+            "+login", self.user, self.password,
+            "+app_update", str(appid), "validate",
+            "+quit",
+        ]
+        logger.info(f"Installing/updating app {appid} to {install_dir}")
+        return self._steamcmd_run(cmd, filter_array=[], retries=retries, sleep_seconds=sleep_seconds)
 
     # ---------------------------------------------------------------------- #
     @staticmethod
@@ -147,54 +218,24 @@ class SteamCMD:
         return "Timeout" in output or "Failed to connect" in output
 
     def get_local_update_time(self, mod_path):
-        p = Path(mod_path) / ".modmeta.json"
-        if not p.exists():
+        p=mod_path / ".modmeta.json"
+        if not os.path.exists(p):
             return datetime.utcfromtimestamp(0)
         try:
             with p.open("r", encoding="utf-8") as fh:
-                data = json.load(fh)
-            ts = data.get("timestamp")
-            if ts is None:
-                return datetime.utcfromtimestamp(0)
-            if isinstance(ts, (int, float)):
-                return datetime.utcfromtimestamp(int(ts))
-            if isinstance(ts, str):
-                # try numeric string first
-                try:
-                    return datetime.utcfromtimestamp(int(ts))
-                except Exception:
-                    # try ISO format (handle trailing Z)
-                    s = ts
-                    if s.endswith("Z"):
-                        s = s[:-1] + "+00:00"
-                    try:
-                        dt = datetime.fromisoformat(s)
-                        if dt.tzinfo is not None:
-                            dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
-                        return dt
-                    except Exception:
-                        return datetime.utcfromtimestamp(0)
-            return datetime.utcfromtimestamp(0)
-        except Exception:
-            return datetime.utcfromtimestamp(0)
-
+                data=json.load(fh)
+                return data.get("timestamp", datetime.utcfromtimestamp(0))
+        except:
+            datetime.utcfromtimestamp(0)
+            
     def set_local_update_time(self, mod_path, steamid, name, dt):
-        p = Path(mod_path) / ".modmeta.json"
-        p.parent.mkdir(parents=True, exist_ok=True)
-        # normalize dt to integer epoch seconds for JSON
-        if isinstance(dt, datetime):
-            ts = int(dt.timestamp())
-        else:
-            try:
-                ts = int(dt)
-            except Exception:
-                ts = int(datetime.utcnow().timestamp())
-        data = {
-            "steamid": steamid,
-            "name": name,
-            "timestamp": ts,
+        p=mod_path / ".modmeta.json"
+        data={
+            "steamid":steamid,
+            "name":name,
+            "timestamp":dt,
         }
-
+        
         with p.open("w", encoding="utf-8") as fh:
             json.dump(data, fh, indent=2, ensure_ascii=False)
 

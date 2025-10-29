@@ -102,7 +102,7 @@ class ArmaConfig:
                 logger.error(f"I/O error reading {self.json_file}: {e}")
             except Exception:
                 logger.exception(f"Unexpected error loading {self.json_file}")
-        logger.debug("D")
+                
         # Apply JSON overrides if available
         self._apply_json_overrides()
 
