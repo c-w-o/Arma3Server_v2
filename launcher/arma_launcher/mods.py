@@ -161,7 +161,7 @@ class ModManager:
             srv_path=self.cfg.this_server_mods / name
             mod_path=self.cfg.common_share / name
             if not os.path.exists(srv_path):
-                shutil.copytree(str(srv_path), str(mod_path), dirs_exist_ok=True)
+                shutil.copytree(str(mod_path), str(srv_path), dirs_exist_ok=True)
             self._normalize_mod_case(mod_path)
             self._copy_keys(mod_path, name, "0")
             dst = self.servermods_dir / f"@{name}"
