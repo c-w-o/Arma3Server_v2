@@ -29,7 +29,14 @@ def _load_steam_credentials():
     logger.warning(f"stream credentials {cfg_path} file not found, try loading from environment")
     return os.environ.get("STEAM_USER"), os.environ.get("STEAM_PASSWORD")
 
-
+def _safe_int(value, default, name=None):
+    try:
+        return int(value)
+    except Exception:
+        if name:
+            logger.warning(f"Invalid integer for {name}: {value!r}, using {default}")
+        return default
+    
 class ArmaConfig:
     """
     Central configuration for the Arma 3 dedicated launcher.
@@ -70,28 +77,20 @@ class ArmaConfig:
             if file_pass:
                 self.steam_password = file_pass
             if self.steam_user or self.steam_password:
-                logger.info("Steam credentials loaded from fallback")
-        
-        def _safe_int(value, default, name=None):
-            try:
-                return int(value)
-            except Exception:
-                if name:
-                    logger.warning(f"Invalid integer for {name}: {value!r}, using {default}")
-                return default
-
+                logger.info("Steam credentials loaded from file")
+        logger.debug("A")
         self.limit_fps = _safe_int(data.get("ARMA_LIMITFPS", "120"), 120, "ARMA_LIMITFPS")
         self.world = data.get("ARMA_WORLD", "empty")
         self.port = _safe_int(int(data.get("PORT", 2302)), 2302, "PORT")
         self.profile = data.get("ARMA_PROFILE", "default")
         self.headless_clients = _safe_int(int(data.get("HEADLESS_CLIENTS", 0)), 0, "HEADLESS_CLIENTS")
         self.use_ocap = False
-        
+        logger.debug("B")
         self.mods = []
         self.servermods = []
         self.maps = []
         self.clientmods = []
-        
+        logger.debug("C")
         # JSON-based override (server.json)
         self.json_file = self.config_dir / "server.json"
         self.json_data = {}
@@ -106,7 +105,7 @@ class ArmaConfig:
                 logger.error(f"I/O error reading {self.json_file}: {e}")
             except Exception:
                 logger.exception(f"Unexpected error loading {self.json_file}")
-
+        logger.debug("D")
         # Apply JSON overrides if available
         self._apply_json_overrides()
 
