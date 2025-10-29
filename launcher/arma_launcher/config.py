@@ -78,21 +78,18 @@ class ArmaConfig:
                 self.steam_password = file_pass
             if self.steam_user or self.steam_password:
                 logger.info("Steam credentials loaded from file")
-        logger.debug("A")
         self.limit_fps = _safe_int(data.get("ARMA_LIMITFPS", "120"), 120, "ARMA_LIMITFPS")
         self.world = data.get("ARMA_WORLD", "empty")
         self.port = _safe_int(int(data.get("PORT", 2302)), 2302, "PORT")
         self.profile = data.get("ARMA_PROFILE", "default")
         self.headless_clients = _safe_int(int(data.get("HEADLESS_CLIENTS", 0)), 0, "HEADLESS_CLIENTS")
         self.use_ocap = False
-        logger.debug("B")
         self.mods = []
         self.servermods = []
         self.maps = []
         self.clientmods = []
-        logger.debug("C")
         # JSON-based override (server.json)
-        self.json_file = self.config_dir / "server.json"
+        self.json_file = self.this_share / "config/server.json"
         self.json_data = {}
         if self.json_file.exists():
             try:
