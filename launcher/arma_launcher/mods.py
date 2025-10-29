@@ -24,18 +24,22 @@ class ModManager:
         # extensions to force to lower-case (can be overridden in config as 'normalize_exts')
         self.normalize_exts = getattr(config, "normalize_exts", [".pbo", ".paa", ".sqf"])
         
-        self.this_server_mods = self.cfg.this_share
-        self.this_mission_mods = self.cfg.this_share
-        self.common_server_mods = self.cfg.common_share
-        self.common_base_mods = self.cfg.common_share
-        self.common_maps = self.cfg.common_maps
-
+        self._server_mod_names=[]
+        self._mod_names=[]
+    
+    def get_server_mod_names():
+        return self._server_mod_names
+    
+    def get_mod_names():
+        return self._mod_names
+    
+    
     def resolve_path(self, key):
         path=None
         if key == "maps":
             path=self.cfg.common_maps
         if key == "serverMods":
-            path=self.cfg.common_maps
+            path=self.cfg.common_server_mods
         if key == "clientMods":
             path=self.cfg.common_base_mods
         if key == "missionMods":
@@ -129,7 +133,8 @@ class ModManager:
     def _link_all_mods(self):
         """Create symbolic links for mods and servermods from workshop."""
         logger.debug("Linking all mods into %s and %s...", self.mods_dir, self.servermods_dir)
-
+        self._server_mod_names=[]
+        self._mod_names=[]
         effective = self._get_effective_mod_lists()
         all_mods = []
         for key, modlist in effective.items():
@@ -140,10 +145,14 @@ class ModManager:
                 mod_path = mod_path / steamid
                 if key=="serverMods" or key=="extraServer":
                     dst = self.servermods_dir / f"@{name}"
+                    self._server_mod_names.append(f"@{name}")
                 else:
                     dst = self.mods_dir / f"@{name}"
-                self._safe_link(mod_path, dst)
+                    if key!="clientMods":
+                        self._mod_names.append(f"@{name}")
                 self._normalize_mod_case(mod_path)
+                if key!="clientMods":
+                    self._safe_link(mod_path, dst)
                 self._copy_keys(mod_path, name, steamid)
                 all_mods.append(dst)
 
@@ -234,6 +243,14 @@ class ModManager:
     def _copy_keys(self, moddir: Path, dispname: str, steamid: str):
         """Copies all .bikey files from a mod to the server's keys folder."""
         found = []
+        
+        # ensure keys dir exists
+        try:
+            self.keys_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            logger.error(f"Failed to ensure keys_dir {self.keys_dir}: {e}")
+            return
+        
         # Walk and find .bikey files case-insensitively
         for root, _, files in os.walk(moddir):
             for fn in files:

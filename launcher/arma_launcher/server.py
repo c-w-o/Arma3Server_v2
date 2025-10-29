@@ -12,7 +12,7 @@ import threading
 from string import Template
 from pathlib import Path
 import logging
-
+import time
 # Use explicit logger name so setup_logger configures it predictably.
 # setup_logger(...) should configure "arma_launcher" (see __main__.py).
 logger = logging.getLogger("arma_launcher")
@@ -49,12 +49,14 @@ class ServerLauncher:
         return_code = launch_with_live_logging(launch_cmd,
                                        stdout_log="/arma3/logs/arma_server.log",
                                        stderr_log="/arma3/logs/arma_server_errors.log")
+        while(True):
+            time.sleep(1)
 
     # ---------------------------------------------------------------------- #
     def _build_server_command(self) -> str:
         """Build the full Arma 3 server launch command."""
-        mods_param = self._mod_param("mod", self.mods.mods_dir)
-        servermods_param = self._mod_param("serverMod", self.mods.servermods_dir)
+        mods_param = self._mod_param("mod", self.cfg.mods_dir)
+        servermods_param = self._mod_param("serverMod", self.cfg.servermods_dir)
 
         launch = f"{self.arma_binary} -filePatching -limitFPS={self.limit_fps} -world={self.world}"
         launch += f" -port={self.port} -name=\"{self.profile}\" -profiles=\"/arma3/config/profiles\""
@@ -189,4 +191,5 @@ def launch_with_live_logging(command, stdout_log=None, stderr_log=None):
 
     process.wait()  # Block until Arma exits
     logger.info(f"Arma 3 server exited with code {process.returncode}")
+    
     return process.returncode
