@@ -157,7 +157,7 @@ class ModManager:
                 all_mods.append(dst)
 
         if self.cfg.use_ocap:
-            name="@ocap"
+            name="ocap"
             srv_path=self.cfg.this_server_mods / name
             mod_path=self.cfg.common_share / name
             if not os.path.exists(srv_path):

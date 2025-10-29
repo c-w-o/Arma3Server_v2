@@ -52,7 +52,7 @@ class ArmaConfig:
         self.tmp_dir = Path(data.get("TMP_DIR", "/tmp"))
 
         self.basic_config = data.get("BASIC_CONFIG", "basic.cfg")
-        self.arma_config = data.get("ARMA_CONFIG", "server.cfg")
+        self.arma_config = data.get("ARMA_CONFIG", "generated_a3server.cfg")
         self.param_config = data.get("PARAM_CONFIG", "params.cfg")
         self.mods_preset = data.get("MODS_PRESET", "mods.json")
 
