@@ -33,8 +33,10 @@ def validate_config(config, schema):
         validate(instance=config, schema=schema)
         return True, None
     except ValidationError as e:
-        location = "/".join(str(p) for p in getattr(e, "path", []))
-        return False, f"JSON Schema Validation Error: {str(e)} (at {location})"
+        location = "/".join(str(p) for p in getattr(e, "path", [])) or "<root>"
+        # Use the short message provided by jsonschema instead of the full representation
+        short = getattr(e, "message", str(e))
+        return False, f"JSON Schema Validation Error: {short} (at {location})"
 
 
 def merge_defaults(config):
