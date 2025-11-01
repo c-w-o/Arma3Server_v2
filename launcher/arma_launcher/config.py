@@ -122,7 +122,7 @@ class ArmaConfig:
         self.servermods = active_cfg.get("servermods", [])
         self.maps = active_cfg.get("maps", [])
         self.clientmods = active_cfg.get("client-side-mods", [])
-
+        self.headless_clients=active_cfg.get("numHeadless", 0)
         logger.info(f"Loaded profile '{active_name}' from JSON (OCAP={self.use_ocap})")
 
     @classmethod

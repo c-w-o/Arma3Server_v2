@@ -59,6 +59,15 @@ def main():
         logger.info("Arma install/update finished.")
     else:
         logger.info(f"Arma binary present: {arma_path}")
+        # Neu: bei jedem Start validieren (sofern nicht SKIP_INSTALL=true)
+        if config.skip_install:
+            logger.info("SKIP_INSTALL=true — skipping validation of existing Arma installation.")
+        else:
+            logger.info("Validating Arma installation via SteamCMD (running app_update validate).")
+            if not steam.install_arma(str(config.arma_root)):
+                logger.error("Arma validation/update failed — exiting.")
+                sys.exit(1)
+            logger.info("Arma validation/update finished.")
     
     # --- Generate server config from server.json/schema (must exist in config dir now) ---
     try:
