@@ -74,7 +74,7 @@ def main():
         generate_for_config(config)
     except Exception as e:
         logger.exception(f"Generating a3server.cfg failed: {e}")
-        sys.exit(1)
+        sys.exit(0)
 
     # --- Handle mods and workshop ---
     mods = ModManager(config, steam)

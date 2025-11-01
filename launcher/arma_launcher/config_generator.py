@@ -145,14 +145,17 @@ def generate_for_config(cfg, schema_path: Path = None, output_name: str = "gener
     ok, error = validate_config(config, schema)
     if not ok:
         logger.error("Validation failed: %s", error)
-        raise ValueError(error)
+        sys.exit(0)
 
     if "config-name" not in config:
-        raise ValueError("Missing 'config-name' in server.json")
+        logger.error("Missing 'config-name' in server.json")
+        sys.exit(0)
     if "configs" not in config or not isinstance(config["configs"], dict):
-        raise ValueError("Missing/invalid 'configs' object in server.json")
+        logger.error("Missing/invalid 'configs' object in server.json")
+        sys.exit(0)
     if config["config-name"] not in config["configs"]:
-        raise ValueError(f"Active config '{config['config-name']}' not found in 'configs'")
+        logger.error(f"Active config '{config['config-name']}' not found in 'configs'")
+        sys.exit(0)
 
     merged = merge_defaults(config)
     cfg_text = generate_a3server_cfg(merged)
