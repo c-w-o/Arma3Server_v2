@@ -102,7 +102,7 @@ class ArmaConfig:
                 logger.error(f"I/O error reading {self.json_file}: {e}")
             except Exception:
                 logger.exception(f"Unexpected error loading {self.json_file}")
-                
+        
         # Apply JSON overrides if available
         self._apply_json_overrides()
 
@@ -116,13 +116,17 @@ class ArmaConfig:
         if not active_cfg:
             logger.warning(f"No matching config '{active_name}' found in server.json")
             return
-
-        self.use_ocap = active_cfg.get("useOCAP", False)
+        defaults=self.json_data.get("defaults", {})
+        
+        self.use_ocap = active_cfg.get("useOCAP", defaults.get("useOCAP", False))
+        self.headless_clients=active_cfg.get("numHeadless", defaults.get("numHeadless", self.headless_clients))
+        self.limit_fps=active_cfg.get("limitFPS", defaults.get("limitFPS", self.limit_fps))
+        
+        
         self.mods = active_cfg.get("mods", [])
         self.servermods = active_cfg.get("servermods", [])
         self.maps = active_cfg.get("maps", [])
         self.clientmods = active_cfg.get("client-side-mods", [])
-        self.headless_clients=active_cfg.get("numHeadless", 0)
         logger.info(f"Loaded profile '{active_name}' from JSON (OCAP={self.use_ocap})")
 
     @classmethod

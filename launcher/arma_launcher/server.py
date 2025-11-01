@@ -79,7 +79,17 @@ class ServerLauncher:
         """Generate mod launch parameter string."""
         if not path.exists():
             return ""
-        mods = [str(m) for m in path.iterdir() if m.is_dir() and m.name.startswith("@")]
+        mods = []
+        for m in path.iterdir():
+            if not (m.is_dir() and m.name.startswith("@")):
+                continue
+            try:
+                # wenn der Mod-Pfad unter dem arma_root liegt, entferne das Präfix
+                rel = m.relative_to(self.cfg.arma_root)
+                mods.append(rel.as_posix())
+            except Exception:
+                # sonst kompletten Pfad verwenden (als POSIX-String)
+                mods.append(m.as_posix())
         if not mods:
             return ""
         joined = ";".join(mods)
