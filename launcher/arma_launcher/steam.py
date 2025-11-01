@@ -25,6 +25,20 @@ class SteamCMD:
         self.user = config.steam_user
         self.password = config.steam_password
 
+    def _mask_cmd(self, cmd):
+        """
+        Return a masked copy of cmd where username/password after '+login' are replaced.
+        """
+        tokens = list(map(str, cmd))
+        for idx, t in enumerate(tokens):
+            if t == "+login":
+                if idx + 1 < len(tokens):
+                    tokens[idx + 1] = "<REDACTED_USER>"
+                if idx + 2 < len(tokens) and not tokens[idx + 2].startswith("+"):
+                    tokens[idx + 2] = "<REDACTED_PW>"
+                break
+        return tokens
+
     def _steamcmd_run(self, cmd, filter_array=None, retries: int = 5, sleep_seconds: int = 60, per_try_timeout: int = 30) -> bool:
         """
         Common runner for steamcmd invocations.
@@ -32,7 +46,7 @@ class SteamCMD:
         Returns True on success (exitcode 0), False otherwise.
         """
         
-        if filter is None:
+        if filter_array is None:
             filter_array = [
                 "Redirecting stderr to",
                 "ILocalize::AddFile()",
@@ -51,7 +65,8 @@ class SteamCMD:
         
         filter_array = filter_array or []
         for attempt in range(1, retries + 1):
-            logger.info(f"SteamCMD attempt {attempt}/{retries}: {' '.join(map(str, cmd))}")
+            masked_cmd = self._mask_cmd(cmd)
+            logger.info(f"SteamCMD attempt {attempt}/{retries}: {' '.join(masked_cmd)}")
             try:
                 with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1) as proc:
                     try:
