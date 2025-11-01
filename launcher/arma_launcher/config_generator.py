@@ -58,8 +58,9 @@ def generate_a3server_cfg(merged):
     cfg.append(f'passwordAdmin = "{merged.get("adminPassword", "")}";')
     cfg.append(f'serverCommandPassword = "{merged.get("serverCommandPassword", "")}";')
     cfg.append(f'maxPlayers = {merged.get("maxPlayers", 32)};')
+    active_name=json_data.get("config-name", None)
     cfg.append("persistent = 1;")
-    cfg.append("verifySignatures = 1;")
+    cfg.append("verifySignatures = 2;")
     cfg.append("voteThreshold = 0.33;")
     cfg.append("logFile = \"logs/server_console_%Y-%m-%d.log\";")
     cfg.append("timeStampFormat = \"full\";")
@@ -72,7 +73,7 @@ def generate_a3server_cfg(merged):
     cfg.append("maxDesync = 120;")
     cfg.append("maxPing = 300;")
     cfg.append("maxPacketLoss = 30;")
-    
+    cfg.append("steamProtocolMaxDataSize = 32768;")
     # Admin Steam IDs (falls angegeben)
     admins = merged.get("admins", [])
     if admins:

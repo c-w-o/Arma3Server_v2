@@ -58,7 +58,7 @@ class ServerLauncher:
         mods_param = self._mod_param("mod", self.cfg.mods_dir)
         servermods_param = self._mod_param("serverMod", self.cfg.servermods_dir)
 
-        launch = f"{self.arma_binary} -filePatching -limitFPS={self.limit_fps} -world={self.world}"
+        launch = f"{self.arma_binary} -limitFPS={self.limit_fps} -world={self.world}"
         launch += f" -port={self.port} -name=\"{self.profile}\" -profiles=\"/arma3/config/profiles\""
         launch += f" {mods_param} {servermods_param}"
 

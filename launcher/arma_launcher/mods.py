@@ -301,6 +301,7 @@ class ModManager:
         defaults = json_data.get("defaults", {})
         configs = json_data.get("configs", {})
         active_name=json_data.get("config-name", None)
+        
         if active_name is None:
             logger.error("no active setup selected")
             return {}
