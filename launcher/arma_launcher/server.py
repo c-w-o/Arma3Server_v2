@@ -86,10 +86,10 @@ class ServerLauncher:
             if not (m.is_dir() and m.name.startswith("@")):
                 continue
             try:
-                # wenn der Mod-Pfad unter dem arma_root liegt, entferne das Präfix
-                #rel = m.relative_to(self.cfg.arma_root)
-                #mods.append(rel.as_posix())
-                mods.append((m.as_posix()))
+                 wenn der Mod-Pfad unter dem arma_root liegt, entferne das Präfix
+                rel = m.relative_to(self.cfg.arma_root)
+                mods.append(rel.as_posix())
+                #mods.append((m.as_posix()))
             except Exception:
                 # sonst kompletten Pfad verwenden (als POSIX-String)
                 mods.append(m.as_posix())

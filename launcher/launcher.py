@@ -66,11 +66,7 @@ def main():
             logger.info("Will validate Arma installation via SteamCMD (app_update validate).")
             need_install_or_validate = True
 
-    if need_install_or_validate:
-        if not steam.install_arma(str(config.arma_root)):
-            logger.error("Arma installation/update failed — exiting.")
-            sys.exit(1)
-        logger.info("Arma install/update finished.")
+    
     
     # --- Generate server config from server.json/schema (must exist in config dir now) ---
     try:
@@ -84,8 +80,18 @@ def main():
 
     # Parallelisiere Mod-Sync und optional Arma-Install/Validate (SteamCMD)
     with ThreadPoolExecutor(max_workers=2) as ex:
-        f_sync = ex.submit(mods.sync)
-        f_install = ex.submit(steam.install_arma, str(config.arma_root)) if need_install_or_validate else None
+        def __mods_sync():
+            return mods.sync()
+        
+        f_sync = ex.submit(__mods_sync)
+        
+        def __install_arma(arma_root: str):
+            if not steam.install_arma(str(config.arma_root)):
+                logger.error("Arma installation/update failed — exiting.")
+                return False
+            logger.info("Arma install/update finished.")
+            return True
+        f_install = ex.submit(__install_arma, str(config.arma_root)) if need_install_or_validate else None
 
         sync_ok = f_sync.result()
         install_ok = True if f_install is None else f_install.result()
