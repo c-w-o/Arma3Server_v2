@@ -226,7 +226,7 @@ def launch_with_live_logging(command, stdout_log=None, stderr_log=None):
         r"Warning: rightHandIKCurve, wrong size",
         r"Warning: unset head bob mode in animation",
         r"doesn't exist in skeleton OFP2_ManSkeleton",
-        r"Error: Object(2 :"
+        r"Error: Object\(2 :"
         r"Warning: Convex component representing"
     ]
     sep_log_path = "/arma3/logs/arma_cba_warnings.log"
