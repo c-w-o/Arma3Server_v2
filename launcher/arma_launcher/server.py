@@ -120,12 +120,12 @@ class ServerLauncher:
             f"{server_cmd} -client -connect=127.0.0.1 -port={self.port}"
             f" -config=\"{tmp_cfg}\""
         )
-
+        hd_pass = self.cfg.game_password
         for i in range(self.clients):
             hc_template = Template(os.getenv("HEADLESS_CLIENTS_PROFILE", "$profile-hc-$i"))
             hc_name = hc_template.substitute(profile=self.profile, i=i, ii=i + 1)
 
-            hc_launch = f"{base_launch} -name=\"{hc_name}\""
+            hc_launch = f"{base_launch} -name=\"{hc_name}\" -password=\"{hd_pass}\""
             logger.info(f"Launching headless client {i+1}/{self.clients}: {hc_name}")
             logger.debug(f"HC Command: {hc_launch}")
 
