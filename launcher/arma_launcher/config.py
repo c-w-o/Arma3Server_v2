@@ -123,6 +123,7 @@ class ArmaConfig:
         self.limit_fps=active_cfg.get("limitFPS", defaults.get("limitFPS", self.limit_fps))
         self.game_password=active_cfg.get("serverPassword", defaults.get("serverPassword", ""))
         self.filePatching=active_cfg.get("filePatching", defaults.get("filePatching", False))
+        logger.warning(f"filePatching is {str(self.filePatching)}")
         self.mods = active_cfg.get("mods", [])
         self.servermods = active_cfg.get("servermods", [])
         self.maps = active_cfg.get("maps", [])
