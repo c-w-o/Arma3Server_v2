@@ -220,7 +220,7 @@ def launch_with_live_logging(command, stdout_log=None, stderr_log=None):
     # Patterns to route to separate log (adjust/extend as needed)
     sep_patterns = [
         r"does not support Extended Event Handlers",  # CBA/xeh messages
-        r"Warning Message: No entry 'bin\config.bin/CfgWeapons/manual",
+        r"Warning Message: No entry 'bin\\config.bin/CfgWeapons/manual",
         r"Warning Message: '/' is not a value",
         r"Warning Message: Size: '/' not an array",
         r"Warning: rightHandIKCurve, wrong size",
