@@ -86,7 +86,7 @@ def main():
         f_sync = ex.submit(__mods_sync)
         
         def __install_arma(arma_root: str):
-            if not steam.install_arma(str(config.arma_root)):
+            if not steam.install_arma(str(config.arma_root), retries=12):
                 logger.error("Arma installation/update failed — exiting.")
                 return False
             logger.info("Arma install/update finished.")
