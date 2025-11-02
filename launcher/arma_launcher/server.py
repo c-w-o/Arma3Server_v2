@@ -105,25 +105,10 @@ class ServerLauncher:
     def _start_headless_clients(self, server_cmd: str):
         """Start configured number of headless clients (HCs)."""
         tmp_cfg = self.cfg.config_dir / "generated_hc_a3client.cfg"
-        logger.info("Preparing temporary headless client config...")
-        try:
-            data = self.server_cfg.read_text()
-            matches = re.findall(r'(\w+\[\])\s*=\s*\{(.*?)\};', data, re.MULTILINE)
-            config_values = {m[0].lower(): m[1] for m in matches}
-
-            if "headlessclients[]" not in config_values:
-                data += '\nheadlessclients[] = {"127.0.0.1"};\n'
-            if "localclient[]" not in config_values:
-                data += '\nlocalclient[] = {"127.0.0.1"};\n'
-
-            tmp_cfg.write_text(data)
-        except Exception as e:
-            logger.error(f"Failed to prepare temporary config for HCs: {e}")
-            return
-
+        
         base_launch = (
             f"{server_cmd} -client -connect=127.0.0.1 -port={self.port}"
-            f" -config=\"{tmp_cfg}\""
+            f" -config=\"{server_cfg}\""
         )
         hd_pass = self.cfg.game_password
         for i in range(self.clients):
