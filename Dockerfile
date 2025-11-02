@@ -46,7 +46,7 @@ ENV THIS_SHARE_ARMA_ROOT=/var/run/share/arma3/this-server
 ENV WORKSHOP_DIR=/tmp/steamapps/workshop/content/107410
 
 RUN mkdir -p $ARMA_ROOT $COMMON_SHARE_ARMA_ROOT $THIS_SHARE_ARMA_ROOT $WORKSHOP_DIR
-WORKDIR /arma3
+WORKDIR /tmp
 
 
 
