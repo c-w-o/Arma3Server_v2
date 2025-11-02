@@ -101,8 +101,7 @@ class ServerLauncher:
     # ---------------------------------------------------------------------- #
     def _start_headless_clients(self, server_cmd: str):
         """Start configured number of headless clients (HCs)."""
-        tmp_cfg = Path("/tmp/arma3.cfg")
-
+        tmp_cfg = self.cfg.arma_root / "generated_hc_a3client.cfg"
         logger.info("Preparing temporary headless client config...")
         try:
             data = self.server_cfg.read_text()
@@ -129,8 +128,6 @@ class ServerLauncher:
             hc_name = hc_template.substitute(profile=self.profile, i=i, ii=i + 1)
 
             hc_launch = f"{base_launch} -name=\"{hc_name}\" -password=\"{hd_pass}\""
-            if self.cfg.filePatching:
-                hc_launch += " -filePatching"
             logger.info(f"Launching headless client {i+1}/{self.clients}: {hc_name}")
             logger.debug(f"HC Command: {hc_launch}")
 

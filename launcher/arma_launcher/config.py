@@ -88,6 +88,8 @@ class ArmaConfig:
         self.servermods = []
         self.maps = []
         self.clientmods = []
+        # list of DLC/app IDs to ensure installed (from JSON defaults/active)
+        self.dlcs = []
         # JSON-based override (server.json)
         self.json_file = self.this_share / "config/server.json"
         self.json_data = {}
@@ -128,6 +130,8 @@ class ArmaConfig:
         self.servermods = active_cfg.get("servermods", [])
         self.maps = active_cfg.get("maps", [])
         self.clientmods = active_cfg.get("client-side-mods", [])
+        # DLCs / additional apps (list of appid strings or objects)
+        self.dlcs = active_cfg.get("dlcs", defaults.get("dlcs", []))
         logger.info(f"Loaded profile '{active_name}' from JSON (OCAP={self.use_ocap})")
 
     @classmethod
