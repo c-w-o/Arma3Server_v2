@@ -117,7 +117,7 @@ class ModManager:
                 else:
                     # Prüfe Validität + Aktualität via zentrale Methode (enthält _verify_mod_minimum)
                     try:
-                        up_to_date = self.steam.is_mod_up_to_date(steamid, mod_path)
+                        up_to_date = self.steam.is_mod_up_to_date(steamid, mod_path, name)
                     except Exception as e:
                         logger.debug(f"Error while checking if mod is up-to-date for {steamid}: {e}")
                         up_to_date = False

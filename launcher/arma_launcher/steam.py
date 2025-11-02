@@ -237,7 +237,7 @@ class SteamCMD:
 
         # --- NEU: minimale Datei-/Ordner-Prüfung ---
         try:
-            if not self._verify_mod_minimum(src_path):
+            if not self._verify_mod_minimum(src_path, name):
                 logger.error(f"Mod {steam_id} ({name}) fehlt minimale Dateien/Ordner in {src_path}. Abbruch.")
                 return False
         except Exception as e:
@@ -414,7 +414,7 @@ class SteamCMD:
             logger.debug(f"GetPublishedFileDetails failed for {steam_id}: {e}")
             return None
 
-    def is_mod_up_to_date(self, steam_id: str, mod_path: str) -> bool:
+    def is_mod_up_to_date(self, steam_id: str, mod_path: str, name: str) -> bool:
         """
         Prüft, ob ein lokaler Mod aktuell ist:
         - minimale Datei-/Ordner-Prüfung (_verify_mod_minimum)
@@ -425,7 +425,7 @@ class SteamCMD:
         dst = Path(mod_path)
         # lokale Existenz + minimale Validierung
         if not dst.exists():
-            logger.info(f"Mod path does not exist: {dst}")
+            logger.info(f"Mod path does not exist: {dst, name}")
             return False
         try:
             if not self._verify_mod_minimum(dst):
@@ -451,7 +451,7 @@ class SteamCMD:
         logger.debug(f"Mod {steam_id} at {dst} is up-to-date.")
         return True
 
-    def _verify_mod_minimum(self, src_path: Path, required: list = None) -> bool:
+    def _verify_mod_minimum(self, src_path: Path, name: str,  required: list = None) -> bool:
         """
         Prüft, ob im heruntergeladenen Mod-Verzeichnis minimale Inhalte vorhanden sind.
         Standard: entweder vorhandener 'addons' Ordner, mindestens eine .pbo Datei oder 'meta.cpp'.
@@ -495,6 +495,6 @@ class SteamCMD:
                     missing.append(req)
 
         if missing:
-            logger.debug(f"Validation failed for {src_path}. Missing: {missing}")
+            logger.debug(f"Validation failed for {name} ({src_path}). Missing: {missing}")
             return False
         return True
