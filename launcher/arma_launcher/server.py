@@ -43,6 +43,8 @@ class ServerLauncher:
             logger.info(f"Configured to start {self.clients} headless client(s).")
             self._start_headless_clients(launch_cmd)
 
+        if self.server_cfg.exists():
+            launch_cmd += f" -config=\"{self.server_cfg}\""
         logger.info("Starting Arma 3 dedicated server...")
         logger.debug(f"Full launch command:\n{launch_cmd}")
 
@@ -57,10 +59,10 @@ class ServerLauncher:
         """Build the full Arma 3 server launch command."""
         mods_param = self._mod_param("mod", self.cfg.mods_dir)
         servermods_param = self._mod_param("serverMod", self.cfg.servermods_dir)
-
-        launch = f"{self.arma_binary} -limitFPS={self.limit_fps} -world={self.world}"
+        paching=""
         if self.cfg.filePatching:
-                launch += " -filePatching"
+            paching = " -filePatching"
+        launch = f"{self.arma_binary} {paching} -limitFPS={self.limit_fps} -world={self.world}"
         launch += f" -port={self.port} -name=\"{self.profile}\" -profiles=\"/arma3/config/profiles\""
         launch += f" {mods_param} {servermods_param}"
 
@@ -71,8 +73,6 @@ class ServerLauncher:
             with open(self.param_cfg) as f:
                 extra_params = f.readline().strip()
                 launch += f" {extra_params}"
-        if self.server_cfg.exists():
-            launch += f" -config=\"{self.server_cfg}\""
 
         return launch
 
@@ -230,7 +230,7 @@ def launch_with_live_logging(command, stdout_log=None, stderr_log=None):
         r"Warning: Convex component representing"
     ]
     sep_log_path = "/arma3/logs/arma_cba_warnings.log"
-
+    
     process = subprocess.Popen(
         command,
         shell=True,
