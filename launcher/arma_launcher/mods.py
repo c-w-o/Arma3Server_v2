@@ -63,6 +63,27 @@ class ModManager:
         """
         logger.info("Starting mod synchronization...")
 
+        # --- Install/ensure DLCs / additional apps configured in JSON ---
+        dlcs = getattr(self.cfg, "dlcs", []) or []
+        if dlcs:
+            logger.info(f"Ensuring {len(dlcs)} DLC(s)/apps are installed...")
+            for entry in dlcs:
+                if isinstance(entry, dict):
+                    appid = str(entry.get("appid") or entry.get("id") or "")
+                else:
+                    appid = str(entry)
+                if not appid:
+                    logger.warning(f"Skipping invalid DLC entry: {entry}")
+                    continue
+                logger.info(f"Installing/ensuring app {appid}")
+                try:
+                    ok = self.steam.install_app(appid, install_dir=str(self.cfg.arma_root))
+                    if not ok:
+                        logger.warning(f"install_app reported failure for {appid}")
+                except Exception as e:
+                    logger.exception(f"Error while installing app {appid}: {e}")
+        # --- Ende DLC-Handling ---
+
         # Resolve effective mod lists by merging defaults + active config and removing minus-mods
         effective = self._get_effective_mod_lists()
         

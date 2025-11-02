@@ -33,6 +33,9 @@ class ServerLauncher:
         self.param_cfg = self.cfg.config_dir / self.cfg.param_config
         self.server_cfg = self.cfg.config_dir / self.cfg.arma_config
 
+        # keep references to started headless client processes (optional shutdown/monitoring)
+        self.hc_procs = []
+
     # ---------------------------------------------------------------------- #
     def start(self):
         """Main entrypoint: prepare and launch server and HCs."""
@@ -101,7 +104,7 @@ class ServerLauncher:
     # ---------------------------------------------------------------------- #
     def _start_headless_clients(self, server_cmd: str):
         """Start configured number of headless clients (HCs)."""
-        tmp_cfg = self.cfg.arma_root / "generated_hc_a3client.cfg"
+        tmp_cfg = self.cfg.config_dir / "generated_hc_a3client.cfg"
         logger.info("Preparing temporary headless client config...")
         try:
             data = self.server_cfg.read_text()
@@ -131,7 +134,40 @@ class ServerLauncher:
             logger.info(f"Launching headless client {i+1}/{self.clients}: {hc_name}")
             logger.debug(f"HC Command: {hc_launch}")
 
-            subprocess.Popen(hc_launch, shell=True)
+            # start HC with captured stdout/stderr so we can route logs separately
+            proc = subprocess.Popen(
+                hc_launch,
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+            )
+            # per-HC logger (will inherit global logging config)
+            hc_logger = logging.getLogger(f"arma_launcher.hc.{i+1}")
+            hc_out_log = f"/arma3/logs/headless_client_{i+1}.log"
+            hc_err_log = f"/arma3/logs/headless_client_{i+1}_err.log"
+
+            t_hc_out = threading.Thread(
+                target=stream_reader,
+                args=(proc.stdout, hc_logger.info, hc_out_log),
+                daemon=True,
+            )
+            t_hc_err = threading.Thread(
+                target=stream_reader,
+                args=(proc.stderr, hc_logger.error, hc_err_log, ["error", "warning"]),
+                daemon=True,
+            )
+            t_hc_out.start()
+            t_hc_err.start()
+            # keep process reference for later monitoring/shutdown if desired
+            self.hc_procs.append((proc, hc_name))
+
+            # optional small throttle between HC starts
+            try:
+                time.sleep(float(os.getenv("HC_START_DELAY", "1")))
+            except Exception:
+                pass
 
     # Ende Klasse ServerLauncher
 
