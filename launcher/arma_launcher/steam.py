@@ -12,6 +12,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 from arma_launcher.log import get_logger
+from contextlib import contextmanager
 
 logger = get_logger()
 
@@ -24,6 +25,65 @@ class SteamCMD:
         self.workshop_dir = self.tmp_dir / "steamapps/workshop/content/107410"
         self.user = config.steam_user
         self.password = config.steam_password
+
+    # --- Datei-basierter plattformübergreifender Mutex für steamcmd ---
+    def _lock_file_path(self) -> Path:
+        return Path(self.tmp_dir) / "steamcmd.lock"
+
+    @contextmanager
+    def _steamcmd_mutex(self, timeout: int = 600):
+        """
+        Acquire a filesystem lock to serialize steamcmd invocations across processes.
+        Uses fcntl on POSIX and msvcrt on Windows. Waits up to `timeout` seconds.
+        """
+        lock_path = self._lock_file_path()
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        # open in append-binary so file exists and we can lock
+        lock_file = open(lock_path, "a+b")
+        start = time.time()
+        try:
+            if os.name == "nt":
+                import msvcrt
+                while True:
+                    try:
+                        # lock 1 byte (non-blocking)
+                        msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+                        break
+                    except OSError:
+                        if time.time() - start > timeout:
+                            raise TimeoutError("Timeout acquiring steamcmd lock")
+                        time.sleep(0.1)
+            else:
+                import fcntl
+                while True:
+                    try:
+                        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        break
+                    except (BlockingIOError, OSError):
+                        if time.time() - start > timeout:
+                            raise TimeoutError("Timeout acquiring steamcmd lock")
+                        time.sleep(0.1)
+            logger.debug(f"Acquired steamcmd lock: {lock_path}")
+            yield
+        finally:
+            try:
+                if os.name == "nt":
+                    try:
+                        lock_file.seek(0)
+                        import msvcrt
+                        msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+                    except Exception:
+                        pass
+                else:
+                    try:
+                        import fcntl
+                        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                    except Exception:
+                        pass
+            finally:
+                lock_file.close()
+                logger.debug(f"Released steamcmd lock: {lock_path}")
+    # --- Ende Mutex ---
 
     def _mask_cmd(self, cmd):
         """
@@ -64,79 +124,86 @@ class SteamCMD:
             ]
         
         filter_array = filter_array or []
-        for attempt in range(1, retries + 1):
-            masked_cmd = self._mask_cmd(cmd)
-            logger.info(f"SteamCMD attempt {attempt}/{retries}: {' '.join(masked_cmd)}")
-            try:
-                with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1) as proc:
+
+        # gesamter Aufruf durch Mutex serialisieren (verhindert parallele steamcmd-Starts)
+        try:
+            with self._steamcmd_mutex():
+                for attempt in range(1, retries + 1):
+                    masked_cmd = self._mask_cmd(cmd)
+                    logger.info(f"SteamCMD attempt {attempt}/{retries}: {' '.join(masked_cmd)}")
                     try:
-                        for line in proc.stdout:
-                            output = line.rstrip("\n")
-                            # skip noisey lines
-                            if any(m in output for m in filter_array):
-                                continue
-
-                            # progress/info routing
-                            if "Downloading update" in output or "Extracting" in output or "Success" in output:
-                                logger.info(output)
-                            else:
-                                logger.debug(output)
-
-                            # transient errors -> kill and retry
-                            if self._is_rate_limited(output):
-                                logger.warning("SteamCMD rate limited — killing process and retrying after backoff.")
-                                try:
-                                    proc.kill()
-                                except Exception:
-                                    pass
-                                break
-                            if self._is_timeout(output):
-                                logger.warning("SteamCMD timeout detected — killing process and retrying after backoff.")
-                                try:
-                                    proc.kill()
-                                except Exception:
-                                    pass
-                                break
-                            if self._is_request_revoked(output):
-                                logger.warning("SteamCMD login revoked / result 26 detected — killing process and retrying after backoff.")
-                                try:
-                                    proc.kill()
-                                except Exception:
-                                    pass
-                                break
-
-                        # Wait for process to exit (guard with timeout)
-                        try:
-                            returncode = proc.wait(timeout=per_try_timeout)
-                        except subprocess.TimeoutExpired:
-                            logger.warning("SteamCMD did not exit in time — killing and treating as failure for this attempt.")
+                        with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1) as proc:
                             try:
-                                proc.kill()
-                            except Exception:
-                                pass
-                            returncode = proc.wait()
+                                for line in proc.stdout:
+                                    output = line.rstrip("\n")
+                                    # skip noisey lines
+                                    if any(m in output for m in filter_array):
+                                        continue
 
-                        if returncode == 0:
-                            logger.info("SteamCMD finished successfully.")
-                            return True
-                        else:
-                            logger.debug(f"SteamCMD exited with code {returncode} (attempt {attempt}).")
+                                    # progress/info routing
+                                    if "Downloading update" in output or "Extracting" in output or "Success" in output:
+                                        logger.info(output)
+                                    else:
+                                        logger.debug(output)
+
+                                    # transient errors -> kill and retry
+                                    if self._is_rate_limited(output):
+                                        logger.warning("SteamCMD rate limited — killing process and retrying after backoff.")
+                                        try:
+                                            proc.kill()
+                                        except Exception:
+                                            pass
+                                        break
+                                    if self._is_timeout(output):
+                                        logger.warning("SteamCMD timeout detected — killing process and retrying after backoff.")
+                                        try:
+                                            proc.kill()
+                                        except Exception:
+                                            pass
+                                        break
+                                    if self._is_request_revoked(output):
+                                        logger.warning("SteamCMD login revoked / result 26 detected — killing process and retrying after backoff.")
+                                        try:
+                                            proc.kill()
+                                        except Exception:
+                                            pass
+                                        break
+
+                                # Wait for process to exit (guard with timeout)
+                                try:
+                                    returncode = proc.wait(timeout=per_try_timeout)
+                                except subprocess.TimeoutExpired:
+                                    logger.warning("SteamCMD did not exit in time — killing and treating as failure for this attempt.")
+                                    try:
+                                        proc.kill()
+                                    except Exception:
+                                        pass
+                                    returncode = proc.wait()
+
+                                if returncode == 0:
+                                    logger.info("SteamCMD finished successfully.")
+                                    return True
+                                else:
+                                    logger.debug(f"SteamCMD exited with code {returncode} (attempt {attempt}).")
+                            except Exception as e:
+                                logger.exception(f"Error while running SteamCMD: {e}")
+                                try:
+                                    proc.kill()
+                                except Exception:
+                                    pass
+                    except FileNotFoundError:
+                        logger.error("steamcmd executable not found at %s", self.steam_root)
+                        return False
                     except Exception as e:
-                        logger.exception(f"Error while running SteamCMD: {e}")
-                        try:
-                            proc.kill()
-                        except Exception:
-                            pass
-            except FileNotFoundError:
-                logger.error("steamcmd executable not found at %s", self.steam_root)
-                return False
-            except Exception as e:
-                logger.exception(f"Failed to start SteamCMD: {e}")
+                        logger.exception(f"Failed to start SteamCMD: {e}")
 
-            # exponential backoff (capped)
-            backoff = min(sleep_seconds * (2 ** (attempt - 1)), 600)
-            logger.info(f"Waiting {backoff}s before next SteamCMD attempt.")
-            time.sleep(backoff)
+                    # exponential backoff (capped)
+                    backoff = min(sleep_seconds * (2 ** (attempt - 1)), 600)
+                    logger.info(f"Waiting {backoff}s before next SteamCMD attempt.")
+                    time.sleep(backoff)
+        except TimeoutError as e:
+            logger.error(f"Could not acquire steamcmd lock: {e}")
+            return False
 
         logger.error("SteamCMD failed after all retries.")
         return False

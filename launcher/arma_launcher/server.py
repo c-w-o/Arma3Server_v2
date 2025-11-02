@@ -107,7 +107,7 @@ class ServerLauncher:
         
         base_launch = (
             f"{server_cmd} -client -connect=127.0.0.1 -port={self.port}"
-            f" -config=\"{self.cfg.server_cfg}\""
+            f" -config=\"{self.cfg.arma_config}\""
         )
         hd_pass = self.cfg.game_password
         for i in range(self.clients):
