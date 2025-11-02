@@ -139,10 +139,14 @@ class ServerLauncher:
     # Ende Klasse ServerLauncher
 
 
-def stream_reader(pipe, logger_func, log_file=None, filters=None):
+def stream_reader(pipe, logger_func, log_file=None, filters=None, separate_patterns=None, separate_log=None):
     """
     Reads output from a subprocess pipe and routes it to logger and/or file.
     Runs in its own thread.
+
+    New:
+    - separate_patterns: list of regex strings; if a line matches any, it's written to separate_log and NOT sent to logger_func.
+    - separate_log: path to file where matched lines are appended.
     """
     # open file with explicit encoding and line-buffering if requested
     if log_file:
@@ -154,11 +158,37 @@ def stream_reader(pipe, logger_func, log_file=None, filters=None):
     else:
         log_fh = None
 
+    if separate_log:
+        try:
+            sep_fh = open(separate_log, "a", buffering=1, encoding="utf-8")
+        except OSError:
+            logger.exception(f"Cannot open separate log file {separate_log} for appending")
+            sep_fh = None
+    else:
+        sep_fh = None
+
     try:
         for line in iter(pipe.readline, ""):
             if not line:
                 continue
             line = line.rstrip("\n")
+
+            # If separate_patterns configured and line matches -> write to separate log and skip main logging
+            if separate_patterns:
+                try:
+                    if any(re.search(pat, line, re.IGNORECASE) for pat in separate_patterns):
+                        if sep_fh:
+                            sep_fh.write(line + "\n")
+                            try:
+                                sep_fh.flush()
+                            except Exception:
+                                pass
+                        # do not forward to main logger
+                        continue
+                except Exception:
+                    # on regex errors fallback to normal logging path
+                    logger.debug("Error while applying separate_patterns; continuing normal logging")
+
             # Filter if needed
             if filters and not any(f.lower() in line.lower() for f in filters):
                 continue
@@ -170,6 +200,11 @@ def stream_reader(pipe, logger_func, log_file=None, filters=None):
     finally:
         if log_fh:
             log_fh.close()
+        if sep_fh:
+            try:
+                sep_fh.close()
+            except Exception:
+                pass
         try:
             pipe.close()
         except Exception:
@@ -181,6 +216,21 @@ def launch_with_live_logging(command, stdout_log=None, stderr_log=None):
     Launch Arma 3 server process with live logging and optional file routing.
     """
     logger.info("Launching Arma 3 server with live logging...")
+
+    # Patterns to route to separate log (adjust/extend as needed)
+    sep_patterns = [
+        r"does not support Extended Event Handlers",  # CBA/xeh messages
+        r"Warning Message: No entry 'bin\config.bin/CfgWeapons/manual",
+        r"Warning Message: '/' is not a value",
+        r"Warning Message: Size: '/' not an array",
+        r"Warning: rightHandIKCurve, wrong size",
+        r"Warning: unset head bob mode in animation",
+        r"doesn't exist in skeleton OFP2_ManSkeleton",
+        r"Error: Object(2 :"
+        r"Warning: Convex component representing"
+    ]
+    sep_log_path = "/arma3/logs/arma_cba_warnings.log"
+
     process = subprocess.Popen(
         command,
         shell=True,
@@ -198,7 +248,7 @@ def launch_with_live_logging(command, stdout_log=None, stderr_log=None):
     )
     t_err = threading.Thread(
         target=stream_reader,
-        args=(process.stderr, logger.error, stderr_log, ["error", "warning"]),
+        args=(process.stderr, logger.error, stderr_log, ["error", "warning"], sep_patterns, sep_log_path),
         daemon=True,
     )
     t_out.start()
