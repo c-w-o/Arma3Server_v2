@@ -425,10 +425,10 @@ class SteamCMD:
         dst = Path(mod_path)
         # lokale Existenz + minimale Validierung
         if not dst.exists():
-            logger.info(f"Mod path does not exist: {dst, name}")
+            logger.info(f"Mod path does not exist: {dst}")
             return False
         try:
-            if not self._verify_mod_minimum(dst):
+            if not self._verify_mod_minimum(dst, name):
                 logger.info(f"Mod at {dst} failed minimum validation")
                 return False
         except Exception as e:
