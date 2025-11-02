@@ -61,7 +61,10 @@ def generate_a3server_cfg(merged):
     cfg.append(f'serverCommandPassword = "{merged.get("serverCommandPassword", "")}";')
     cfg.append(f'maxPlayers = {merged.get("maxPlayers", 32)};')
     cfg.append("persistent = 1;")
-    cfg.append("verifySignatures = 2;")
+    if merged.get("filePatching", True):
+        cfg.append("verifySignatures = 2;")
+    else:
+        cfg.append("verifySignatures = 0;")
     cfg.append("voteThreshold = 0.33;")
     cfg.append("logFile = \"logs/server_console_%Y-%m-%d.log\";")
     cfg.append("timeStampFormat = \"full\";")

@@ -122,7 +122,7 @@ class ArmaConfig:
         self.headless_clients=active_cfg.get("numHeadless", defaults.get("numHeadless", self.headless_clients))
         self.limit_fps=active_cfg.get("limitFPS", defaults.get("limitFPS", self.limit_fps))
         self.game_password=active_cfg.get("serverPassword", defaults.get("serverPassword", ""))
-        
+        self.filePatching=active_cfg.get("filePatching", defaults.get("filePatching", False))
         self.mods = active_cfg.get("mods", [])
         self.servermods = active_cfg.get("servermods", [])
         self.maps = active_cfg.get("maps", [])

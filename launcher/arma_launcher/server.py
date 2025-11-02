@@ -59,6 +59,8 @@ class ServerLauncher:
         servermods_param = self._mod_param("serverMod", self.cfg.servermods_dir)
 
         launch = f"{self.arma_binary} -limitFPS={self.limit_fps} -world={self.world}"
+        if self.cfg.filePatching:
+                launch += " -filePatching"
         launch += f" -port={self.port} -name=\"{self.profile}\" -profiles=\"/arma3/config/profiles\""
         launch += f" {mods_param} {servermods_param}"
 
@@ -127,6 +129,8 @@ class ServerLauncher:
             hc_name = hc_template.substitute(profile=self.profile, i=i, ii=i + 1)
 
             hc_launch = f"{base_launch} -name=\"{hc_name}\" -password=\"{hd_pass}\""
+            if self.cfg.filePatching:
+                hc_launch += " -filePatching"
             logger.info(f"Launching headless client {i+1}/{self.clients}: {hc_name}")
             logger.debug(f"HC Command: {hc_launch}")
 
