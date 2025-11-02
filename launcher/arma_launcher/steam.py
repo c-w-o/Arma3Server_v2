@@ -159,6 +159,18 @@ class SteamCMD:
         dst_path = Path(path)
         if not src_path.exists():
             logger.warning(f"Workshop content not found after download: {src_path}")
+            return False
+
+        # --- NEU: minimale Datei-/Ordner-Prüfung ---
+        try:
+            if not self._verify_mod_minimum(src_path):
+                logger.error(f"Mod {steam_id} ({name}) fehlt minimale Dateien/Ordner in {src_path}. Abbruch.")
+                return False
+        except Exception as e:
+            logger.exception(f"Fehler bei der Validierung von {src_path}: {e}")
+            return False
+        # --- Ende Prüfung ---
+
         try:
             dst_parent = dst_path.parent
             dst_parent.mkdir(parents=True, exist_ok=True)
@@ -309,3 +321,88 @@ class SteamCMD:
         except Exception as e:
             logger.debug(f"GetPublishedFileDetails failed for {steam_id}: {e}")
             return None
+
+    def is_mod_up_to_date(self, steam_id: str, mod_path: str) -> bool:
+        """
+        Prüft, ob ein lokaler Mod aktuell ist:
+        - minimale Datei-/Ordner-Prüfung (_verify_mod_minimum)
+        - Vergleich lokaler .modmeta.json Timestamp mit letztem Remote-Update
+        Rückgabe: True = aktuell / keine Aktion nötig, False = nicht aktuell (Download empfohlen).
+        Wenn das Remote-Datum nicht ermittelt werden kann, wird False zurückgegeben (so wird beim Start ein erneuter Download ausgelöst).
+        """
+        dst = Path(mod_path)
+        # lokale Existenz + minimale Validierung
+        if not dst.exists():
+            logger.info(f"Mod path does not exist: {dst}")
+            return False
+        try:
+            if not self._verify_mod_minimum(dst):
+                logger.info(f"Mod at {dst} failed minimum validation")
+                return False
+        except Exception as e:
+            logger.exception(f"Validation error for {dst}: {e}")
+            return False
+
+        # lokale und remote Zeitstempel vergleichen
+        local_dt = self.get_local_update_time(dst)
+        remote_dt = self.get_last_update_date(steam_id)
+
+        if remote_dt is None:
+            logger.debug(f"Could not retrieve remote update date for {steam_id}; treating as not up-to-date.")
+            return False
+
+        # remote neuer -> not up-to-date
+        if remote_dt > local_dt:
+            logger.info(f"Mod {steam_id} at {dst} is outdated (remote {remote_dt} > local {local_dt})")
+            return False
+
+        logger.debug(f"Mod {steam_id} at {dst} is up-to-date.")
+        return True
+
+    def _verify_mod_minimum(self, src_path: Path, required: list = None) -> bool:
+        """
+        Prüft, ob im heruntergeladenen Mod-Verzeichnis minimale Inhalte vorhanden sind.
+        Standard: entweder vorhandener 'addons' Ordner, mindestens eine .pbo Datei oder 'meta.cpp'.
+        Gebe True zurück wenn Mindestanforderungen erfüllt, sonst False.
+        """
+        if required is None:
+            required = ["addons", "meta.cpp", ".pbo"]
+
+        src = Path(src_path)
+        if not src.exists():
+            return False
+
+        missing = []
+
+        # Prüfe auf 'addons' Ordner
+        if "addons" in required:
+            if (src / "addons").exists():
+                pass
+            elif any(src.glob("**/*.pbo")):
+                pass
+            else:
+                missing.append("addons or .pbo")
+
+        # Prüfe auf meta.cpp
+        if "meta.cpp" in required:
+            if not (src / "meta.cpp").exists():
+                # versuchen, case-insensitive zu finden
+                found_meta = any(p.name.lower() == "meta.cpp" for p in src.rglob("*") if p.is_file())
+                if not found_meta:
+                    missing.append("meta.cpp")
+
+        # zusätzliche benannte Anforderungen (falls übergeben)
+        for req in required:
+            if req in ("addons", "meta.cpp", ".pbo"):
+                continue
+            if req.endswith("/"):
+                if not (src / req.rstrip("/")).exists():
+                    missing.append(req)
+            else:
+                if not (src / req).exists():
+                    missing.append(req)
+
+        if missing:
+            logger.debug(f"Validation failed for {src_path}. Missing: {missing}")
+            return False
+        return True
