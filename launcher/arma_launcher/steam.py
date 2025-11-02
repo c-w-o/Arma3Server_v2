@@ -97,6 +97,13 @@ class SteamCMD:
                                 except Exception:
                                     pass
                                 break
+                            if self._is_request_revoked(output):
+                                logger.warning("SteamCMD login revoked / result 26 detected — killing process and retrying after backoff.")
+                                try:
+                                    proc.kill()
+                                except Exception:
+                                    pass
+                                break
 
                         # Wait for process to exit (guard with timeout)
                         try:
@@ -243,6 +250,24 @@ class SteamCMD:
     @staticmethod
     def _is_timeout(output: str) -> bool:
         return "Timeout" in output or "Failed to connect" in output
+
+    @staticmethod
+    def _is_request_revoked(output: str) -> bool:
+        """
+        Detect transient Steam auth/session revocation messages (e.g. 'result 26', 'Request revoked').
+        Returns True when output contains known patterns that should trigger a retry.
+        """
+        if not output:
+            return False
+        o = output.lower()
+        # common SteamCMD wording / variations
+        patterns = [
+            "result 26",
+            "request revoked",
+            "login result: 26",
+            "disconnected from steam",
+        ]
+        return any(p in o for p in patterns)
 
     def get_local_update_time(self, mod_path):
         p = Path(mod_path) / ".modmeta.json"
