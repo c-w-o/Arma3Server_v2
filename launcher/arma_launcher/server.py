@@ -40,22 +40,24 @@ class ServerLauncher:
     def start(self):
         """Main entrypoint: prepare and launch server and HCs."""
         logger.info("Preparing Arma server launch parameters...")
-        launch_cmd = self._build_server_command()
+        launch_cmd, mods_param, servermods_param = self._build_server_command()
 
         if self.clients > 0:
             logger.info(f"Configured to start {self.clients} headless client(s).")
-            self._start_headless_clients(launch_cmd)
+            self._start_headless_clients(f"{launch_cmd} {mods_param}")
 
         if self.server_cfg.exists():
-            launch_cmd += f" -config=\"{self.server_cfg}\""
+            launch_cmd += f" {launch_cmd} {mods_param} -config=\"{self.server_cfg}\""
         logger.info("Starting Arma 3 dedicated server...")
         logger.debug(f"Full launch command:\n{launch_cmd}")
 
-        return_code = launch_with_live_logging(launch_cmd,
-                                       stdout_log="/arma3/logs/arma_server.log",
-                                       stderr_log="/arma3/logs/arma_server_errors.log")
-        while(True):
-            time.sleep(1)
+        return_code = launch_with_live_logging(
+            launch_cmd,
+            stdout_log="/arma3/logs/arma_server.log",
+            stderr_log="/arma3/logs/arma_server_errors.log",
+        )
+        # return the process return code (no infinite loop)
+        return return_code
 
     # ---------------------------------------------------------------------- #
     def _build_server_command(self) -> str:
@@ -67,7 +69,7 @@ class ServerLauncher:
             paching = " -filePatching"
         launch = f"{self.arma_binary} {paching} -limitFPS={self.limit_fps} -world={self.world}"
         launch += f" -port={self.port} -name=\"{self.profile}\" -profiles=\"/arma3/config/profiles\""
-        launch += f" {mods_param} {servermods_param}"
+        #launch += f" {mods_param} {servermods_param}"
 
         # Add base and param configs if present
         if self.basic_cfg.exists():
@@ -77,7 +79,7 @@ class ServerLauncher:
                 extra_params = f.readline().strip()
                 launch += f" {extra_params}"
 
-        return launch
+        return launch, mods_param, servermods_param
 
     # ---------------------------------------------------------------------- #
     def _mod_param(self, name: str, path: Path) -> str:
@@ -160,10 +162,6 @@ def stream_reader(pipe, logger_func, log_file=None, filters=None, separate_patte
     """
     Reads output from a subprocess pipe and routes it to logger and/or file.
     Runs in its own thread.
-
-    New:
-    - separate_patterns: list of regex strings; if a line matches any, it's written to separate_log and NOT sent to logger_func.
-    - separate_log: path to file where matched lines are appended.
     """
     # open file with explicit encoding and line-buffering if requested
     if log_file:
@@ -186,8 +184,9 @@ def stream_reader(pipe, logger_func, log_file=None, filters=None, separate_patte
 
     try:
         for line in iter(pipe.readline, ""):
-            if not line:
-                continue
+            # EOF -> break
+            if line == "":
+                break
             line = line.rstrip("\n")
 
             # If separate_patterns configured and line matches -> write to separate log and skip main logging
@@ -243,8 +242,8 @@ def launch_with_live_logging(command, stdout_log=None, stderr_log=None):
         r"Warning: rightHandIKCurve, wrong size",
         r"Warning: unset head bob mode in animation",
         r"doesn't exist in skeleton OFP2_ManSkeleton",
-        r"Error: Object\(2 :"
-        r"Warning: Convex component representing"
+        r"Error: Object\(2 :",
+        r"Warning: Convex component representing",
     ]
     sep_log_path = "/arma3/logs/arma_cba_warnings.log"
     
