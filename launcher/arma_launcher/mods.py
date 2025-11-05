@@ -134,7 +134,7 @@ class ModManager:
                             logger.info(f"Mod {key} - {name} ({steamid}) queued for download (remote newer or local invalid).")
 
                 if need_download:
-                    self._safe_link(mod_path, self.workshop_dir/steamid)
+                    self._safe_link(self.workshop_dir/steamid, mod_path)
                     mods_to_download.append((name, steamid, mod_path, remote_dt))
 
         # Download missing mods
