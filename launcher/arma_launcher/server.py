@@ -40,14 +40,20 @@ class ServerLauncher:
     def start(self):
         """Main entrypoint: prepare and launch server and HCs."""
         logger.info("Preparing Arma server launch parameters...")
-        launch_cmd, mods_param, servermods_param = self._build_server_command()
+        params = self._build_server_command()
+
+        # build HC params snapshot (before server-specific -config is applied)
+        hc_params = dict(params)
 
         if self.clients > 0:
             logger.info(f"Configured to start {self.clients} headless client(s).")
-            self._start_headless_clients(f"{launch_cmd} {mods_param}")
+            self._start_headless_clients(hc_params)
 
+        # If there's a server-specific config file, add/override it in params
         if self.server_cfg.exists():
-            launch_cmd += f" {launch_cmd} {mods_param} -config=\"{self.server_cfg}\""
+            params["config"] = str(self.server_cfg)
+
+        launch_cmd = self._params_to_cmd(params)
         logger.info("Starting Arma 3 dedicated server...")
         logger.debug(f"Full launch command:\n{launch_cmd}")
 
@@ -60,30 +66,120 @@ class ServerLauncher:
         return return_code
 
     # ---------------------------------------------------------------------- #
-    def _build_server_command(self) -> str:
-        """Build the full Arma 3 server launch command."""
-        mods_param = self._mod_param("mod", self.cfg.mods_dir)
-        servermods_param = self._mod_param("serverMod", self.cfg.servermods_dir)
-        paching=""
-        if self.cfg.filePatching:
-            paching = " -filePatching"
-        launch = f"{self.arma_binary} {paching} -limitFPS={self.limit_fps} -world={self.world}"
-        launch += f" -port={self.port} -name=\"{self.profile}\" -profiles=\"/arma3/config/profiles\""
-        #launch += f" {mods_param} {servermods_param}"
+    def _build_server_command(self) -> dict:
+        """Build the server launch parameters as a dict (key -> value)."""
+        mods = self._mod_param("mod", self.cfg.mods_dir)
+        servermods = self._mod_param("serverMod", self.cfg.servermods_dir)
+
+        params = {}
+        if getattr(self.cfg, "filePatching", False):
+            params["filePatching"] = True
+
+        params["limitFPS"] = str(self.limit_fps)
+        params["world"] = self.world
+        params["port"] = str(self.port)
+        params["name"] = self.profile
+        params["profiles"] = "/arma3/config/profiles"
+
+        if mods:
+            params["mod"] = mods
+        if servermods:
+            params["serverMod"] = servermods
 
         # Add base and param configs if present
         if self.basic_cfg.exists():
-            launch += f" -cfg=\"{self.basic_cfg}\""
+            params["cfg"] = str(self.basic_cfg)
         if self.param_cfg.exists():
             with open(self.param_cfg) as f:
                 extra_params = f.readline().strip()
-                launch += f" {extra_params}"
+                if extra_params:
+                    params["extra"] = extra_params
 
-        return launch, mods_param, servermods_param
+        return params
+
+    # ---------------------------------------------------------------------- #
+    def _params_to_cmd(self, params: dict) -> str:
+        """
+        Convert params dict to a shell command string.
+        Rules:
+         - If a key already starts with '-', use it verbatim as flag name; otherwise prefix with '-'
+         - Boolean True -> emit flag alone (e.g. -filePatching or -client)
+         - Strings -> emit -key=value; for specific keys value will be quoted
+         - 'extra' -> appended verbatim at the end
+        """
+        params_local = dict(params)  # do not mutate caller dict
+        parts = [self.arma_binary]
+
+        # handle filePatching boolean (may be keyed as 'filePatching' or '-filePatching')
+        if params_local.pop("filePatching", False) or params_local.pop("-filePatching", False):
+            parts.append("-filePatching")
+
+        # helper to resolve key variants and produce flag name (+quote rules)
+        def flag_for(key):
+            return key if key.startswith("-") else f"-{key}"
+
+        def needs_quote(stripped_key):
+            return stripped_key in {"name", "profiles", "cfg", "config", "mod", "serverMod", "password"}
+
+        # deterministic order for common params
+        ordered = ["limitFPS", "world", "port", "name", "profiles", "mod", "serverMod", "cfg", "config", "connect", "client", "password", "extra"]
+        handled = set()
+
+        for k in ordered:
+            # accept both 'k' and '-k' forms
+            val = None
+            used_key = None
+            if k in params_local:
+                val = params_local[k]; used_key = k
+            elif f"-{k}" in params_local:
+                val = params_local[f"-{k}"]; used_key = f"-{k}"
+            if used_key is None:
+                continue
+            handled.add(used_key)
+            # build flag
+            flag = flag_for(used_key)
+            stripped = used_key.lstrip("-")
+            if isinstance(val, bool):
+                if val:
+                    parts.append(flag)
+                # false -> skip
+            elif val is None:
+                continue
+            else:
+                sval = str(val)
+                if stripped == "extra":
+                    parts.append(sval)
+                else:
+                    if needs_quote(stripped):
+                        parts.append(f'{flag}="{sval}"')
+                    else:
+                        parts.append(f"{flag}={sval}")
+
+        # any remaining params (not in ordered) get appended (respect leading dash if present)
+        for k, v in params_local.items():
+            if k in handled:
+                continue
+            flag = flag_for(k)
+            stripped = k.lstrip("-")
+            if isinstance(v, bool):
+                if v:
+                    parts.append(flag)
+            elif v is None:
+                continue
+            else:
+                sval = str(v)
+                if stripped == "extra":
+                    parts.append(sval)
+                elif stripped in {"name", "profiles", "cfg", "config", "mod", "serverMod", "password"}:
+                    parts.append(f'{flag}="{sval}"')
+                else:
+                    parts.append(f"{flag}={sval}")
+
+        return " ".join(parts)
 
     # ---------------------------------------------------------------------- #
     def _mod_param(self, name: str, path: Path) -> str:
-        """Generate mod launch parameter string."""
+        """Return semicolon-separated mod list (without -name=) or empty string."""
         if not path.exists():
             return ""
         mods = []
@@ -94,29 +190,33 @@ class ServerLauncher:
                 # wenn der Mod-Pfad unter dem arma_root liegt, entferne das Präfix
                 rel = m.relative_to(self.cfg.arma_root)
                 mods.append(rel.as_posix())
-                #mods.append((m.as_posix()))
             except Exception:
                 # sonst kompletten Pfad verwenden (als POSIX-String)
                 mods.append(m.as_posix())
         if not mods:
             return ""
-        joined = ";".join(mods)
-        return f' -{name}="{joined}" '
+        return ";".join(mods)
 
     # ---------------------------------------------------------------------- #
-    def _start_headless_clients(self, server_cmd: str):
-        """Start configured number of headless clients (HCs)."""
+    def _start_headless_clients(self, base_params: dict):
+        """Start configured number of headless clients (HCs). Builds HC start strings from params dict."""
         
-        base_launch = (
-            f"{server_cmd} -client -connect=127.0.0.1 -port={self.port}"
-            f" -config=\"{self.cfg.arma_config}\""
-        )
         hd_pass = self.cfg.game_password
         for i in range(self.clients):
+            # per-HC params: copy base, then set client/connect/port/config/name/password
+            hc_params = dict(base_params)
+            hc_params["client"] = None
+            hc_params["connect"] = "127.0.0.1"
+            hc_params["port"] = str(self.port)
+            # keep same config reference as original behavior (filename)
+            hc_params["config"] = str(self.cfg.arma_config)
+            # per-HC name
             hc_template = Template(os.getenv("HEADLESS_CLIENTS_PROFILE", "$profile-hc-$i"))
             hc_name = hc_template.substitute(profile=self.profile, i=i, ii=i + 1)
+            hc_params["name"] = hc_name
+            hc_params["password"] = hd_pass
 
-            hc_launch = f"{base_launch} -name=\"{hc_name}\" -password=\"{hd_pass}\""
+            hc_launch = self._params_to_cmd(hc_params)
             logger.info(f"Launching headless client {i+1}/{self.clients}: {hc_name}")
             logger.debug(f"HC Command: {hc_launch}")
 

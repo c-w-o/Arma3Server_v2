@@ -28,10 +28,10 @@ class ModManager:
         self._mod_names=[]
     
     def get_server_mod_names(self):
-        return self._server_mod_names
-    
+        return list(self._server_mod_names)
+
     def get_mod_names(self):
-        return self._mod_names
+        return list(self._mod_names)
     
     
     def resolve_path(self, key):
@@ -134,7 +134,10 @@ class ModManager:
                             logger.info(f"Mod {key} - {name} ({steamid}) queued for download (remote newer or local invalid).")
 
                 if need_download:
-                    self._safe_link(self.workshop_dir/steamid, mod_path)
+                    ws_src=self.workshop_dir/steamid
+                    if ws_src.exists() and not ws_src.is_symlink():
+                        shutil.rmtree(ws_src)
+                    self._safe_link(mod_path, self.workshop_dir/steamid)
                     mods_to_download.append((name, steamid, mod_path, remote_dt))
 
         # Download missing mods
@@ -255,6 +258,8 @@ class ModManager:
             logger.warning(f"Normalize: path does not exist: {mod_path}")
             return
 
+        lower_exts = {e.lower() for e in self.normalize_exts}
+
         # Walk bottom-up to rename files then directories
         for root, dirs, files in os.walk(mod_path, topdown=False):
             root_path = Path(root)
@@ -262,7 +267,7 @@ class ModManager:
             for fname in files:
                 fpath = root_path / fname
                 suffix = fpath.suffix.lower()
-                if suffix in [e.lower() for e in self.normalize_exts]:
+                if suffix in lower_exts:
                     new_name = fpath.name.lower()
                     new_path = fpath.with_name(new_name)
                     if fpath != new_path:
