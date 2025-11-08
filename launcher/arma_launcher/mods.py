@@ -17,7 +17,7 @@ class ModManager:
     def __init__(self, config, steam):
         self.cfg = config
         self.steam = steam
-        self.workshop_dir = config.tmp_dir
+        self.workshop_dir = config.tmp_dir / "steamapps/workshop/content/107410"
         self.mods_dir = config.mods_dir
         self.servermods_dir = config.servermods_dir
         self.keys_dir = config.keys_dir
