@@ -17,6 +17,20 @@ import time
 # setup_logger(...) should configure "arma_launcher" (see __main__.py).
 logger = logging.getLogger("arma_launcher")
 
+# Create module-level patterns so both server and HCs can reuse them
+SEP_PATTERNS = [
+    r"does not support Extended Event Handlers",
+    r"Warning Message: No entry 'bin\\\\config.bin/CfgWeapons/manual",
+    r"Warning Message: '/' is not a value",
+    r"Warning Message: Size: '/' not an array",
+    r"Warning: rightHandIKCurve, wrong size",
+    r"Warning: unset head bob mode in animation",
+    r"doesn't exist in skeleton OFP2_ManSkeleton",
+    r"Error: Object\\(2 :",
+    r"Warning: Convex component representing",
+]
+SEP_LOG_PATH = "/arma3/logs/arma_cba_warnings.log"
+
 
 class ServerLauncher:
     def __init__(self, config, mods):
@@ -237,11 +251,13 @@ class ServerLauncher:
             t_hc_out = threading.Thread(
                 target=stream_reader,
                 args=(proc.stdout, hc_logger.info, hc_out_log),
+                kwargs={"prefix": hc_name},
                 daemon=True,
             )
             t_hc_err = threading.Thread(
                 target=stream_reader,
-                args=(proc.stderr, hc_logger.error, hc_err_log, ["error", "warning"]),
+                args=(proc.stderr, hc_logger.error, hc_err_log, ["error", "warning"], SEP_PATTERNS, SEP_LOG_PATH),
+                kwargs={"prefix": hc_name},
                 daemon=True,
             )
             t_hc_out.start()
@@ -258,7 +274,7 @@ class ServerLauncher:
     # Ende Klasse ServerLauncher
 
 
-def stream_reader(pipe, logger_func, log_file=None, filters=None, separate_patterns=None, separate_log=None):
+def stream_reader(pipe, logger_func, log_file=None, filters=None, separate_patterns=None, separate_log=None, prefix=None):
     """
     Reads output from a subprocess pipe and routes it to logger and/or file.
     Runs in its own thread.
@@ -293,8 +309,9 @@ def stream_reader(pipe, logger_func, log_file=None, filters=None, separate_patte
             if separate_patterns:
                 try:
                     if any(re.search(pat, line, re.IGNORECASE) for pat in separate_patterns):
+                        out_line = f"[{prefix}] {line}" if prefix else line
                         if sep_fh:
-                            sep_fh.write(line + "\n")
+                            sep_fh.write(out_line + "\n")
                             try:
                                 sep_fh.flush()
                             except Exception:
@@ -308,9 +325,11 @@ def stream_reader(pipe, logger_func, log_file=None, filters=None, separate_patte
             # Filter if needed
             if filters and not any(f.lower() in line.lower() for f in filters):
                 continue
-            logger_func(line)
+
+            out_line = f"[{prefix}] {line}" if prefix else line
+            logger_func(out_line)
             if log_fh:
-                log_fh.write(line + "\n")
+                log_fh.write(out_line + "\n")
     except Exception:
         logger.exception("Error while reading process stream")
     finally:
@@ -333,20 +352,6 @@ def launch_with_live_logging(command, stdout_log=None, stderr_log=None):
     """
     logger.info("Launching Arma 3 server with live logging...")
 
-    # Patterns to route to separate log (adjust/extend as needed)
-    sep_patterns = [
-        r"does not support Extended Event Handlers",  # CBA/xeh messages
-        r"Warning Message: No entry 'bin\\config.bin/CfgWeapons/manual",
-        r"Warning Message: '/' is not a value",
-        r"Warning Message: Size: '/' not an array",
-        r"Warning: rightHandIKCurve, wrong size",
-        r"Warning: unset head bob mode in animation",
-        r"doesn't exist in skeleton OFP2_ManSkeleton",
-        r"Error: Object\(2 :",
-        r"Warning: Convex component representing",
-    ]
-    sep_log_path = "/arma3/logs/arma_cba_warnings.log"
-    
     process = subprocess.Popen(
         command,
         shell=True,
@@ -364,7 +369,7 @@ def launch_with_live_logging(command, stdout_log=None, stderr_log=None):
     )
     t_err = threading.Thread(
         target=stream_reader,
-        args=(process.stderr, logger.error, stderr_log, ["error", "warning"], sep_patterns, sep_log_path),
+        args=(process.stderr, logger.error, stderr_log, ["error", "warning"], SEP_PATTERNS, SEP_LOG_PATH),
         daemon=True,
     )
     t_out.start()
