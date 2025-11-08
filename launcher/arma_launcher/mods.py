@@ -136,8 +136,10 @@ class ModManager:
                 if need_download:
                     ws_src=self.workshop_dir/steamid
                     if ws_src.exists() and not ws_src.is_symlink():
+                        logger.warning(f"folder {ws_src} exists")
                         shutil.rmtree(ws_src)
-                    self._safe_link(mod_path, self.workshop_dir/steamid)
+                        logger.warning(f"try link {self.workshop_dir/steamid} to {ws_src}")
+                    self._safe_link(ws_src, mod_path)
                     mods_to_download.append((name, steamid, mod_path, remote_dt))
 
         # Download missing mods
