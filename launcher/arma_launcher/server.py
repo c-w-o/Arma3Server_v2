@@ -132,6 +132,7 @@ class ServerLauncher:
         Rules:
          - If a key already starts with '-', use it verbatim as flag name; otherwise prefix with '-'
          - Boolean True -> emit flag alone (e.g. -filePatching or -client)
+         - None  -> emit flag alone (treat as "only the parameter key / flag")
          - Strings -> emit -key=value; for specific keys value will be quoted
          - 'extra' -> appended verbatim at the end
         """
@@ -167,12 +168,16 @@ class ServerLauncher:
             # build flag
             flag = flag_for(used_key)
             stripped = used_key.lstrip("-")
+
+            # Treat None as "flag only" (emit -key)
+            if val is None:
+                parts.append(flag)
+                continue
+
             if isinstance(val, bool):
                 if val:
                     parts.append(flag)
                 # false -> skip
-            elif val is None:
-                continue
             else:
                 sval = str(val)
                 if stripped == "extra":
@@ -189,11 +194,15 @@ class ServerLauncher:
                 continue
             flag = flag_for(k)
             stripped = k.lstrip("-")
+
+            # Treat None as "flag only"
+            if v is None:
+                parts.append(flag)
+                continue
+
             if isinstance(v, bool):
                 if v:
                     parts.append(flag)
-            elif v is None:
-                continue
             else:
                 sval = str(v)
                 if stripped == "extra":
