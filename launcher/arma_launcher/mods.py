@@ -135,6 +135,7 @@ class ModManager:
 
                 if need_download:
                     ws_src=self.workshop_dir/steamid
+                    logger.warning(f"folder needs {ws_src} download")
                     if ws_src.exists() and not ws_src.is_symlink():
                         logger.warning(f"folder {ws_src} exists")
                         shutil.rmtree(ws_src)
