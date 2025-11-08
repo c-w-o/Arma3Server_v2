@@ -135,12 +135,7 @@ class ModManager:
 
                 if need_download:
                     ws_src=self.workshop_dir/steamid
-                    logger.warning(f"folder needs {ws_src} download")
-                    if ws_src.exists() and not ws_src.is_symlink():
-                        logger.warning(f"folder {ws_src} exists")
-                        shutil.rmtree(ws_src)
-                        logger.warning(f"try link {self.workshop_dir/steamid} to {ws_src}")
-                    self._safe_link(ws_src, mod_path)
+                    self._force_link(mod_path, ws_src)
                     mods_to_download.append((name, steamid, mod_path, remote_dt))
 
         # Download missing mods
@@ -215,6 +210,20 @@ class ModManager:
             if dst.exists() or dst.is_symlink():
                 logger.debug(f"Skipping existing mod link: {dst}")
                 return
+            os.symlink(src, dst)
+            logger.info(f"Linked {dst} → {src}")
+        except Exception as e:
+            logger.error(f"Failed to link {dst} → {src}: {e}")
+            
+    def _force_link(self, src: Path, dst: Path):
+        """Create symlink in any case."""
+        try:
+            if dst.exists() and (dst.is_symlink() or dst.is_file()):
+                logger.warning(f"removing: {dst}")
+                os.unlink(dst)
+            elif dst.exists() and dst.is_dir():
+                logger.warning(f"deleting: {dst}")
+                shutil.rmtree(dst)
             os.symlink(src, dst)
             logger.info(f"Linked {dst} → {src}")
         except Exception as e:
