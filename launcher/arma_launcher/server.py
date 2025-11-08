@@ -242,6 +242,11 @@ class ServerLauncher:
         for i in range(self.clients):
             # per-HC params: copy base, then set client/connect/port/config/name/password
             hc_params = dict(base_params)
+
+            # remove serverMod for headless clients (accept both forms)
+            hc_params.pop("serverMod", None)
+            hc_params.pop("-serverMod", None)
+
             hc_params["client"] = None
             hc_params["connect"] = "127.0.0.1"
             hc_params["port"] = str(self.port)
