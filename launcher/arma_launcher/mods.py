@@ -114,6 +114,7 @@ class ModManager:
                     need_download = True
                     remote_dt = self.steam.get_last_update_date(steamid)
                     logger.info(f"Missing mod {key} - {name} ({steamid}) — queued for download.")
+                    os.mkdir(mod_path)
                 else:
                     # Prüfe Validität + Aktualität via zentrale Methode (enthält _verify_mod_minimum)
                     try:
