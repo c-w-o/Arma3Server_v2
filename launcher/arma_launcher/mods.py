@@ -225,7 +225,7 @@ class ModManager:
                 logger.warning(f"deleting: {dst}")
                 shutil.rmtree(dst)
             os.symlink(src, dst)
-            logger.info(f"Linked {dst} → {src}")
+            logger.info(f"Forced link {dst} → {src}")
         except Exception as e:
             logger.error(f"Failed to link {dst} → {src}: {e}")
     
