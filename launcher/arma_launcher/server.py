@@ -20,16 +20,30 @@ logger = logging.getLogger("arma_launcher")
 # Create module-level patterns so both server and HCs can reuse them
 SEP_PATTERNS = [
     r"does not support Extended Event Handlers",
-    r"Warning Message: No entry 'bin\\\\config.bin/CfgWeapons/manual",
+    r"Warning Message: No entry 'bin\\config.bin/CfgWeapons/manual",
     r"Warning Message: '/' is not a value",
     r"Warning Message: Size: '/' not an array",
     r"Warning: rightHandIKCurve, wrong size",
     r"Warning: unset head bob mode in animation",
     r"doesn't exist in skeleton OFP2_ManSkeleton",
-    r"Error: Object\\(2 :",
+    r"Error: Object\(2 :",
     r"Warning: Convex component representing",
+    r"does not support Extended Event Handlers! Addon:",
+    r"Updating base class ->",
 ]
 SEP_LOG_PATH = "/arma3/logs/arma_cba_warnings.log"
+
+# precompile regexes once at module import time to avoid per-line compile/errors
+SEP_REGEXES = []
+for _pat in SEP_PATTERNS:
+    try:
+        SEP_REGEXES.append(re.compile(_pat, re.IGNORECASE))
+    except re.error:
+        logger.exception(f"Invalid regex in SEP_PATTERNS, skipping: {_pat}")
+
+# keep track of patterns that already raised so we don't spam the logs
+BAD_SEP_PATTERNS_LOGGED = set()
+_BAD_SEP_LOCK = threading.Lock()
 
 
 class ServerLauncher:
@@ -256,7 +270,7 @@ class ServerLauncher:
             )
             t_hc_err = threading.Thread(
                 target=stream_reader,
-                args=(proc.stderr, hc_logger.error, hc_err_log, ["error", "warning"], SEP_PATTERNS, SEP_LOG_PATH),
+                args=(proc.stderr, hc_logger.error, hc_err_log, ["error", "warning"], SEP_REGEXES, SEP_LOG_PATH),
                 kwargs={"prefix": hc_name},
                 daemon=True,
             )
@@ -308,7 +322,12 @@ def stream_reader(pipe, logger_func, log_file=None, filters=None, separate_patte
             # If separate_patterns configured and line matches -> write to separate log and skip main logging
             if separate_patterns:
                 try:
-                    if any(re.search(pat, line, re.IGNORECASE) for pat in separate_patterns):
+                    # support compiled regex objects or plain string patterns (backwards compatible)
+                    matched = any(
+                        (pat.search(line) if hasattr(pat, "search") else re.search(pat, line, re.IGNORECASE))
+                        for pat in separate_patterns
+                    )
+                    if matched:
                         out_line = f"[{prefix}] {line}" if prefix else line
                         if sep_fh:
                             sep_fh.write(out_line + "\n")
@@ -319,7 +338,25 @@ def stream_reader(pipe, logger_func, log_file=None, filters=None, separate_patte
                         # do not forward to main logger
                         continue
                 except Exception:
-                    # on regex errors fallback to normal logging path
+                    # Diagnose which pattern fails, but log each failing pattern only once to avoid flooding
+                    try:
+                        with _BAD_SEP_LOCK:
+                            for pat in separate_patterns:
+                                if pat in BAD_SEP_PATTERNS_LOGGED:
+                                    continue
+                                try:
+                                    if hasattr(pat, "search"):
+                                        # compiled regex -> try a single search
+                                        pat.search(line)
+                                    else:
+                                        # string pattern -> try re.search
+                                        re.search(pat, line, re.IGNORECASE)
+                                except Exception as e:
+                                    BAD_SEP_PATTERNS_LOGGED.add(pat)
+                                    logger.exception(f"separate_patterns element raised for pattern: {repr(pat)}; will not repeat this message")
+                    except Exception:
+                        logger.debug("Error diagnosing separate_patterns failure")
+                    # keep a single low-volume debug note for this line
                     logger.debug("Error while applying separate_patterns; continuing normal logging")
 
             # Filter if needed
@@ -369,7 +406,7 @@ def launch_with_live_logging(command, stdout_log=None, stderr_log=None):
     )
     t_err = threading.Thread(
         target=stream_reader,
-        args=(process.stderr, logger.error, stderr_log, ["error", "warning"], SEP_PATTERNS, SEP_LOG_PATH),
+        args=(process.stderr, logger.error, stderr_log, ["error", "warning"], SEP_REGEXES, SEP_LOG_PATH),
         daemon=True,
     )
     t_out.start()
