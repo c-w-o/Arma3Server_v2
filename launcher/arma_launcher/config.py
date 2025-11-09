@@ -7,6 +7,7 @@ Part of Arma 3 dedicated server launcher for dockerized server instances.
 """
 import os
 import json
+from copy import deepcopy
 from pathlib import Path
 from typing import Optional, Dict
 from arma_launcher.log import get_logger, setup_logger
@@ -116,9 +117,9 @@ class ArmaConfig:
     def get_merged_config(self) -> dict:
         """
         Return a merged configuration dict: defaults overridden by active config.
-        - top-level values: active overrides defaults
-        - 'mods': merge keys, concatenate lists (defaults then active)
-        - 'params', 'missions': concatenate defaults then active
+        - top-level scalar values: active overrides defaults (including falsy values)
+        - 'mods': merge dict keys, concatenate lists (defaults first, then active)
+        - 'params', 'missions': concatenate lists (defaults then active)
         - 'dlcs': prefer active if present, else defaults
         """
         if getattr(self, "_merged_config_cached", None) is not None:
@@ -133,45 +134,79 @@ class ArmaConfig:
         active_name = json_data.get("config-name")
         active = (json_data.get("configs", {}) or {}).get(active_name, {}) or {}
 
-        merged = {}
-        # shallow merge: active overrides defaults
-        merged.update(defaults)
-        merged.update(active)
+        # Start with a deep copy of defaults so we don't mutate original structures.
+        merged = deepcopy(defaults)
 
-        # mods: merge dict keys, concat lists (defaults first)
+        # Shallow overlay of active onto merged for scalar/dict replacements,
+        # but treat 'mods', 'params', 'missions', 'dlcs' specially below.
+        for k, v in active.items():
+            if k in ("mods", "params", "missions", "dlcs"):
+                # skip special keys for now
+                continue
+            # active overrides defaults even if falsy (explicit setting)
+            merged[k] = deepcopy(v)
+
+        # --- mods: merge keys, concatenate lists (defaults first, then active) ---
         defaults_mods = defaults.get("mods", {}) or {}
         active_mods = active.get("mods", {}) or {}
         merged_mods = {}
-        for k in set(defaults_mods.keys()) | set(active_mods.keys()):
-            dlist = defaults_mods.get(k, []) or []
-            alist = active_mods.get(k, []) or []
-            merged_mods[k] = list(dlist) + list(alist)
+        for key in set(defaults_mods.keys()) | set(active_mods.keys()):
+            dlist = defaults_mods.get(key, []) or []
+            alist = active_mods.get(key, []) or []
+            # keep order defaults then active
+            merged_mods[key] = list(dlist) + list(alist)
         merged["mods"] = merged_mods
 
-        # params, missions: concat lists (defaults then active)
+        # --- params and missions: concatenate lists (defaults then active) ---
         merged["params"] = list(defaults.get("params", []) or []) + list(active.get("params", []) or [])
         merged["missions"] = list(defaults.get("missions", []) or []) + list(active.get("missions", []) or [])
 
-        # dlcs: prefer active value if present, else defaults
+        # --- dlcs: prefer active if present, else defaults ---
         if "dlcs" in active:
-            merged["dlcs"] = active.get("dlcs")
+            merged["dlcs"] = deepcopy(active.get("dlcs"))
         else:
-            merged["dlcs"] = defaults.get("dlcs", {})
+            merged["dlcs"] = deepcopy(defaults.get("dlcs", {}))
 
+        # cache and return
         self._merged_config_cached = merged
         return merged
 
     def _apply_json_overrides(self):
-        """Apply JSON config to object attributes and expose merged view."""
-        # ...existing code that loads self.json_data ...
-        # ensure merged view is available for other modules
+        """
+        Apply JSON config to object attributes and expose merged view.
+        Ensure self.json_data is already loaded before calling this.
+        """
+        # existing loading of self.json_data should have happened before
         merged = self.get_merged_config()
         self.json_merged = merged
-        # convenience attributes
+
+        # Convenience attributes for other modules — keep consistent types
         self.mods = merged.get("mods", {})
         self.params = merged.get("params", [])
         self.missions = merged.get("missions", [])
         self.dlcs = merged.get("dlcs", {})
+
+        # Example common attributes that other code expects (override defaults if present)
+        # Only set if present in merged to avoid creating many attributes unnecessarily.
+        if "maxPlayers" in merged:
+            self.max_players = merged.get("maxPlayers")
+        if "hostname" in merged:
+            self.hostname = merged.get("hostname")
+        if "serverPassword" in merged:
+            self.server_password = merged.get("serverPassword")
+        if "adminPassword" in merged:
+            self.admin_password = merged.get("adminPassword")
+        if "serverCommandPassword" in merged:
+            self.server_command_password = merged.get("serverCommandPassword")
+        if "useOCAP" in merged:
+            self.use_ocap = merged.get("useOCAP")
+        if "numHeadless" in merged:
+            self.headless_clients = merged.get("numHeadless")
+        # ...add other convenience mappings as needed...
+
+        # Clear any previously cached dependent data if JSON changed
+        if hasattr(self, "_dependent_cache"):
+            delattr(self, "_dependent_cache")
 
 def setup_logging(log_file: Optional[str] = "/arma3/logs/launcher.log"):
     # Delegate logging setup to central logger in arma_launcher.log
