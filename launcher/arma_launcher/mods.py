@@ -431,6 +431,19 @@ class ModManager:
             try:
                 ename = str(entry[0])
                 esid = str(entry[1]) if entry[1] is not None else None
-           
+            except Exception:
+                ename = str(entry)
+                esid = None
+            key = (ename, esid)
+            if key in seen:
+                continue
+            seen.add(key)
+            combined.append(entry)
+        effective["missionMods"] = combined
+        effective.pop("baseMods", None)
+
+        logger.debug(f"effective mods: {effective}")
+        return effective
+
 
 
