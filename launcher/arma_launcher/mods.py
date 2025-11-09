@@ -134,7 +134,8 @@ class ModManager:
 
                 need_download = False
                 remote_dt = None
-
+                if key == "dlcs":
+                    continue
                 # Wenn fehlt -> Download
                 if not mod_path.exists():
                     need_download = True
@@ -160,7 +161,7 @@ class ModManager:
                             need_download = True
                             logger.info(f"Mod {key} - {name} ({steamid}) queued for download (remote newer or local invalid).")
 
-                if need_download and key != "dlcs":
+                if need_download:
                     ws_src=self.workshop_dir/steamid
                     self._force_link(mod_path, ws_src)
                     mods_to_download.append((name, steamid, mod_path, remote_dt))
@@ -383,6 +384,7 @@ class ModManager:
             minus = raw_active.get("mods", {}).get("minus-mods", []) if isinstance(raw_active.get("mods", {}), dict) else []
 
         active_dlcs=raw_active.get("dlcs", {})
+        effective["dlcs"]=[]
         effective["dlcs"]=[]
         for dlc,active in active_dlcs.items():
             logger.warning(f"DLCs - {dlc} is {'ACTVE' if active else 'inactive'}")

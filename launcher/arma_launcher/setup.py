@@ -50,6 +50,7 @@ class ArmaSetup:
     def _cleanup_arma_root(self):
         """Remove all old links/folders except persistent system dirs."""
         keep = {"steamapps", "battleye", "OCAPLOG", "OCAPTMP"}
+        keep_files={"arma3server_x64", "*.so", "*.vdf", "steam_appid.txt" }
         remove_links = []
         remove_dirs = []
         ignore_files = []
@@ -63,6 +64,8 @@ class ArmaSetup:
                 remove_links.append(item)
             elif item.is_dir():
                 remove_dirs.append(item)
+            elif item.is_file() and any(item.match(pat) for pat in keep_files):
+                remove_links.append(item)
             else:
                 ignore_files.append(item)
 
@@ -112,7 +115,7 @@ class ArmaSetup:
 
         # DLCs
         dlc_path = self.cfg.common_share / "dlcs"
-        all_exts = {**self.cfg.dlc_key_map, **self.cfg.bonus_key_map}
+        all_exts = {**self.cfg.dlc_key_map, **self.cfg.bonus_key_map, **self.cfg.bi_key_map}
         if not dlc_path.exists():
             logger.error("no \"dlcs\" in server common found")
             exit(0)

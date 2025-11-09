@@ -96,9 +96,22 @@ class ServerLauncher:
     # ---------------------------------------------------------------------- #
     def _build_server_command(self) -> dict:
         """Build the server launch parameters as a dict (key -> value)."""
+        
+        
+                
+                
         mods = self._mod_param("mod", self.cfg.mods_dir)
         servermods = self._mod_param("serverMod", self.cfg.servermods_dir)
-
+        merged_cfg=self.cfg.get_merged_config()
+        for cdlc, active in merged_cfg.get("dlcs", {}):
+            if cdlc == "contact":
+                continue
+            if not cdlc in self.cfg.dlc_key_map:
+                logger.warning(f("CDLC {cdlc} unknown or not found, cannot resolve short name"))
+            if active:
+                dlc_short=self.cfg.dlc_key_map[cdlc]
+                mods.insert(0, dlc_short)
+                    
         params = {}
         if getattr(self.cfg, "filePatching", False):
             params["filePatching"] = True
