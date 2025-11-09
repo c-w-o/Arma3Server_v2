@@ -279,7 +279,7 @@ class SteamCMD:
 
         return True
 
-    def install_arma(self, install_dir: str = None, retries: int = 3, sleep_seconds: int = 30, needs_creator: bool=False) -> bool:
+    def install_arma(self, install_dir: str = None, retries: int = 3, sleep_seconds: int = 30) -> bool:
         """
         Install or update Arma 3 (app 233780) via SteamCMD.
         """
@@ -291,16 +291,27 @@ class SteamCMD:
             "+app_update", "233780", "validate",
             "+quit",
         ]
-        cmd_creator= [
+        cmd_creator = [
             str(self.steam_root / "steamcmd.sh"),
             "+force_install_dir", str(install_dir),
             "+login", self.user, self.password,
             "+app_update", "233780", "-beta",
             "creatordlc", "validate",
-            "+quit",
+            "+quit"
+        ]
+        cmd_contact = [
+            str(self.steam_root / "steamcmd.sh"),
+            "+force_install_dir", str(install_dir),
+            "+login", self.user, self.password,
+            "+app_update", "233780", "-beta",
+            "contact", "validate",
+            "+quit"
         ]
         cmd=[]
-        if needs_creator:
+        if self.cfg.needs_contact:
+            logger.info("Validating contact arma3 dedicated server")
+            cmd=cmd_contact
+        elif self.cfg.needs_creator:
             logger.info("Validating creator arma3 dedicated server")
             cmd=cmd_creator
         else:

@@ -51,7 +51,6 @@ class ArmaConfig:
         self.keys_dir = self.arma_root / "keys"
         self.tmp_dir = Path(data.get("TMP_DIR", "/tmp"))
         self.dlc_key_map = {
-            
             "csla-iron-curtain": "csla",
             "global-mobilization": "gm",
             "s.o.g-prairie-fire": "vn",
@@ -245,14 +244,16 @@ class ArmaConfig:
         # --- NEW: determine whether any DLC is active and expose needs_creator ---
         dlcs_val = merged.get("dlcs", None)
         needs_creator = False
+        needs_contact = False
         if isinstance(dlcs_val, dict):
-            needs_creator = any(bool(v) for v in dlcs_val.values())
-        elif isinstance(dlcs_val, (list, tuple)):
-            needs_creator = len(dlcs_val) > 0
+            if dlcs_val.get("contact", False):
+                needs_contact = True
+            else:
+                needs_creator = any(bool(v) for v in dlcs_val.values())
         else:
             needs_creator = False
         self.needs_creator = bool(needs_creator)
-
+        self.needs_contact = bool(needs_contact)
         # Clear any previously cached dependent data if JSON changed
         if hasattr(self, "_dependent_cache"):
             delattr(self, "_dependent_cache")
