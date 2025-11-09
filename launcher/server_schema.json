@@ -76,9 +76,10 @@
         },
         "dlcs": {
           "type": "object",
-          "required": ["contact", "csla-iron-curtain", "global-mobilization", "s.o.g-prairie-fire", "western-sahara", "spearhead-1944", "reaction-forces", "expeditionary-forces"],
+          "required": ["creator", "contact", "csla-iron-curtain", "global-mobilization", "s.o.g-prairie-fire", "western-sahara", "spearhead-1944", "reaction-forces", "expeditionary-forces"],
           "additionalProperties": false,
           "properties": {
+            "creator": { "type": "boolean" },
             "contact": { "type": "boolean" },
             "csla-iron-curtain": { "type": "boolean" },
             "global-mobilization": { "type": "boolean" },
@@ -132,9 +133,10 @@
 
             "dlcs": {
               "type": "object",
-              "required": ["contact", "csla-iron-curtain", "global-mobilization", "s.o.g-prairie-fire", "western-sahara", "spearhead-1944", "reaction-forces", "expeditionary-forces"],
+              "required": ["creator", "contact", "csla-iron-curtain", "global-mobilization", "s.o.g-prairie-fire", "western-sahara", "spearhead-1944", "reaction-forces", "expeditionary-forces"],
               "additionalProperties": false,
               "properties": {
+                "creator": { "type": "boolean" },
                 "contact": { "type": "boolean" },
                 "csla-iron-curtain": { "type": "boolean" },
                 "global-mobilization": { "type": "boolean" },
