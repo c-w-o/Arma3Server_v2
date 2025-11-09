@@ -115,10 +115,17 @@ class ArmaSetup:
 
         # DLCs
         dlc_path = self.cfg.common_share / "dlcs"
-        all_exts = {**self.cfg.dlc_key_map, **self.cfg.bonus_key_map, **self.cfg.bi_key_map}
         if not dlc_path.exists():
             logger.error("no \"dlcs\" in server common found")
             exit(0)
+            
+        all_exts = {}
+        if self.cfg.needs_contact:
+            all_exts = {**self.cfg.bonus_key_map, **self.cfg.bi_key_map}
+        elif self.cfg.cmd_creator:
+            all_exts = {**self.cfg.dlc_key_map, **self.cfg.bonus_key_map}
+        else:
+            all_exts = {**self.cfg.bonus_key_map}
             
         for name,short in all_exts.items():
             src_candidate = dlc_path / short

@@ -50,6 +50,7 @@ Configuration may be supplied via environment variables or a JSON profile (see `
 - headless_clients – number of headless clients to spawn (configured in JSON profile)
 - dlcs – optional list of appids (strings or objects) to ensure installed via SteamCMD
 - mods / servermods – mod lists or directories as configured in profile
+If "contact" is used, no other DLCs can be used. Any other DLC will switch to creator-branch.
 
 Example JSON (snippet):
 ```json
