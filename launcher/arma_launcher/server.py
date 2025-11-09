@@ -106,9 +106,10 @@ class ServerLauncher:
         logger.debug(f"{merged_cfg}")
         for cdlc, active in merged_cfg.get("dlcs", {}).items():
             if cdlc == "contact":
-                dlc_short=self.cfg.bi_key_map[cdlc]
-                mods = str(dlc_short) + (";" + mods if len(mods) > 0 else "")
-                #continue
+                if active:
+                    dlc_short=self.cfg.bi_key_map[cdlc]
+                    mods = str(dlc_short) + (";" + mods if len(mods) > 0 else "")
+                continue
             if not cdlc in self.cfg.dlc_key_map:
                 logger.warning(f"CDLC {cdlc} unknown or not found, cannot resolve short name")
             if active:
