@@ -105,8 +105,8 @@ class ServerLauncher:
         merged_cfg=self.cfg.get_merged_config()
         logger.debug(f"{merged_cfg}")
         for cdlc, active in merged_cfg.get("dlcs", {}).items():
-            if cdlc == "contact":
-                continue
+            #if cdlc == "contact":
+            #    continue
             if not cdlc in self.cfg.dlc_key_map:
                 logger.warning(f"CDLC {cdlc} unknown or not found, cannot resolve short name")
             if active:
