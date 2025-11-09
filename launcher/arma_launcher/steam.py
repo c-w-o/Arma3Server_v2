@@ -301,8 +301,10 @@ class SteamCMD:
         ]
         cmd=[]
         if needs_creator:
+            logger.info("Validating creator arma3 dedicated server")
             cmd=cmd_creator
         else:
+            logger.info("Validating vanilla arma3 dedicated server")
             cmd=cmd_normal
         logger.info(f"Installing/updating Arma 3 to {install_dir}")
         return self._steamcmd_run(cmd, retries=retries, sleep_seconds=sleep_seconds)
