@@ -103,7 +103,7 @@ class ServerLauncher:
         mods = self._mod_param("mod", self.cfg.mods_dir)
         servermods = self._mod_param("serverMod", self.cfg.servermods_dir)
         merged_cfg=self.cfg.get_merged_config()
-        logger.debug(f{merged_cfg})
+        logger.debug(f"{merged_cfg}")
         for cdlc, active in merged_cfg.get("dlcs", {}):
             if cdlc == "contact":
                 continue
