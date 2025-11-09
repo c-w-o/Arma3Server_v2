@@ -122,7 +122,7 @@ class ArmaSetup:
             if not src_candidate.exists():
                 logger.debug(f"DLC/Extension {name} not present in common_share, should be downloaded: {src_candidate}")
                 os.makedirs(src_candidate)
-            links.append((src_candidate, self.cfg.arma_root / name))
+            links.append((src_candidate, self.cfg.arma_root / short))
 
 
         # mpmissions (optional)
