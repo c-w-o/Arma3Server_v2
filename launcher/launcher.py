@@ -6,6 +6,7 @@ Author: Don & ChatGPT Refactor
 
 import sys
 import os
+import time
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 # logger früh initialisieren, damit Module beim Import bereits korrekt loggen
@@ -49,7 +50,8 @@ def main():
     steam = SteamCMD(config)
     arma_binary_env = os.getenv("ARMA_BINARY", "")
     arma_path = Path(arma_binary_env) if arma_binary_env else (config.arma_root / "arma3server_x64")
-
+    while(True):
+        time.sleep(1)
     # Entscheide hier nur, ob eine Installation/Validation nötig ist — führe sie später parallel aus.
     need_install_or_validate = False
     if not arma_path.exists():
