@@ -50,7 +50,32 @@ class ArmaConfig:
         self.servermods_dir = self.arma_root / "servermods"
         self.keys_dir = self.arma_root / "keys"
         self.tmp_dir = Path(data.get("TMP_DIR", "/tmp"))
-
+        self.dlc_key_map = {
+            "contact": "contact",
+            "csla-iron-curtain": "csla",
+            "global-mobilization": "gm",
+            "s.o.g-prairie-fire": "vn",
+            "western-sahara": "ws",
+            "spearhead-1944": "spe",
+            "reaction-forces": "rf",
+            "expeditionary-forces": "ef",
+        }
+        
+        self.bonus_key_map = {
+            "Art-of-War": "aow",
+            "Argo": "argo",
+            "Curator": "curator",
+            "Dta": "dta",
+            "Livonia": "enoch",
+            "Expansion": "expansion",
+            "Helicopters": "heli",
+            "Jets": "jets",
+            "Karts": "kart",
+            "Marksmen": "mark",
+            "Laws-of-War": "orange",
+            "Tac-Ops": "tacops",
+            "Tanks": "tank"
+        }
         self.basic_config = data.get("BASIC_CONFIG", "basic.cfg")
         self.arma_config = data.get("ARMA_CONFIG", "generated_a3server.cfg")
         self.param_config = data.get("PARAM_CONFIG", "params.cfg")

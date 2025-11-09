@@ -71,22 +71,12 @@ class ModManager:
         #  - list of appids / dicts -> install via SteamCMD (existing behavior)
         #  - dict of boolean flags (from server.json dlcs object) -> map to shortnames and link from common_share
         if isinstance(dlcs, dict):
-            dlc_key_map = {
-                "contact": "contact",
-                "csla-iron-curtain": "csla",
-                "global-mobilization": "gm",
-                "s.o.g-prairie-fire": "vn",
-                "western-sahara": "ws",
-                "spearhead-1944": "spe",
-                "reaction-forces": "rf",
-                "expeditionary-forces": "ef",
-            }
             logger.info("Applying DLC boolean flags from JSON — linking enabled DLCs from common_share if present.")
             dlcs_root = self.cfg.common_share / "dlcs"
             for cfg_key, enabled in dlcs.items():
                 if not enabled:
                     continue
-                short = dlc_key_map.get(cfg_key)
+                short = self.cfg.dlc_key_map.get(cfg_key)
                 if not short:
                     logger.debug(f"Unknown DLC key in config, skipping: {cfg_key}")
                     continue
@@ -441,6 +431,13 @@ class ModManager:
             combined.append(entry)
         effective["missionMods"] = combined
         effective.pop("baseMods", None)
+        
+        active_dlcs=raw_active.get("dlcs", {})
+        effective["dlcs"]=[]
+        for dlc,active in active_dlcs.items():
+            if active:
+                effective["dlcs"].append(dlc)
+                
 
         logger.debug(f"effective mods: {effective}")
         return effective
