@@ -50,6 +50,8 @@ class ModManager:
             path=self.cfg.this_server_mods
         if key == "extraMission":
             path=self.cfg.this_mission_mods
+        if key == "dlcs":
+            path = self.cfg.arma_root
         
         if path is None:
             logger.warning(f"unknown mod key: {key}")
@@ -436,7 +438,7 @@ class ModManager:
         effective["dlcs"]=[]
         for dlc,active in active_dlcs.items():
             if active:
-                effective["dlcs"].append(dlc)
+                effective["dlcs"].append((dlc,dlc))
                 
 
         logger.debug(f"effective mods: {effective}")
