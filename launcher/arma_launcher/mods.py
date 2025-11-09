@@ -160,7 +160,7 @@ class ModManager:
                             need_download = True
                             logger.info(f"Mod {key} - {name} ({steamid}) queued for download (remote newer or local invalid).")
 
-                if need_download:
+                if need_download and key != "dlcs":
                     ws_src=self.workshop_dir/steamid
                     self._force_link(mod_path, ws_src)
                     mods_to_download.append((name, steamid, mod_path, remote_dt))
@@ -385,6 +385,7 @@ class ModManager:
         active_dlcs=raw_active.get("dlcs", {})
         effective["dlcs"]=[]
         for dlc,active in active_dlcs.items():
+            logger.warning(f"DLCs - {dlc} is {"ACTVE" if active else "inactive"}")
             if active:
                 effective["dlcs"].append((dlc,dlc))
         
