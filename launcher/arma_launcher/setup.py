@@ -122,7 +122,7 @@ class ArmaSetup:
         all_exts = {}
         if self.cfg.needs_contact:
             all_exts = {**self.cfg.bonus_key_map, **self.cfg.bi_key_map}
-        elif self.cfg.cmd_creator:
+        elif self.cfg.needs_creator:
             all_exts = {**self.cfg.dlc_key_map, **self.cfg.bonus_key_map}
         else:
             all_exts = {**self.cfg.bonus_key_map}
