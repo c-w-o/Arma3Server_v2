@@ -108,22 +108,9 @@ class ArmaConfig:
         self._apply_json_overrides()
 
     @classmethod
-    def from_env(cls, env: dict = None):
-        """
-        Construct ArmaConfig from an environment mapping (defaults to os.environ).
-        This replaces the missing from_env used by launcher.py.
-        """
-        if env is None:
-            env = os.environ
-        keys = [
-            "ARMA_ROOT", "TMP_DIR", "BASIC_CONFIG", "ARMA_CONFIG", "PARAM_CONFIG",
-            "MODS_PRESET", "STEAM_USER", "STEAM_PASSWORD", "SKIP_INSTALL",
-            "ARMA_LIMITFPS", "ARMA_WORLD", "PORT", "ARMA_PROFILE", "HEADLESS_CLIENTS",
-        ]
-        data = {k: env.get(k) for k in keys}
-        # Also include any other env vars the constructor checks directly
-        # (keeps future compatibility)
-        data.update({k: env.get(k) for k in env.keys() if k not in data})
+    def from_env(cls):
+        """Load configuration from environment variables."""
+        data = dict(os.environ)
         return cls(data)
 
     def get_merged_config(self) -> dict:
