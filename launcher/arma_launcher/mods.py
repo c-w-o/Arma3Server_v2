@@ -385,7 +385,7 @@ class ModManager:
         active_dlcs=raw_active.get("dlcs", {})
         effective["dlcs"]=[]
         for dlc,active in active_dlcs.items():
-            logger.warning(f"DLCs - {dlc} is {"ACTVE" if active else "inactive"}")
+            logger.warning(f"DLCs - {dlc} is {'ACTVE' if active else 'inactive'}")
             if active:
                 effective["dlcs"].append((dlc,dlc))
         
