@@ -279,18 +279,31 @@ class SteamCMD:
 
         return True
 
-    def install_arma(self, install_dir: str = None, retries: int = 3, sleep_seconds: int = 30) -> bool:
+    def install_arma(self, install_dir: str = None, retries: int = 3, sleep_seconds: int = 30, needs_creator: bool=False) -> bool:
         """
-        Install or update Arma 3 (app 107410) via SteamCMD.
+        Install or update Arma 3 (app 233780) via SteamCMD.
         """
         install_dir = install_dir or str(self.cfg.arma_root)
-        cmd = [
+        cmd_normal = [
             str(self.steam_root / "steamcmd.sh"),
             "+force_install_dir", str(install_dir),
             "+login", self.user, self.password,
             "+app_update", "233780", "validate",
             "+quit",
         ]
+        cmd_creator= [
+            str(self.steam_root / "steamcmd.sh"),
+            "+force_install_dir", str(install_dir),
+            "+login", self.user, self.password,
+            "+app_update", "233780", "-beta",
+            "creatordlc", "validate",
+            "+quit",
+        ]
+        cmd=[]
+        if needs_creator:
+            cmd=cmd_creator
+        else:
+            cmd=cmd_normal
         logger.info(f"Installing/updating Arma 3 to {install_dir}")
         return self._steamcmd_run(cmd, retries=retries, sleep_seconds=sleep_seconds)
 

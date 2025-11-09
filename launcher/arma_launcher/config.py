@@ -174,15 +174,15 @@ class ArmaConfig:
     def _apply_json_overrides(self):
         """
         Apply JSON config to object attributes and expose merged view.
-        Ensure self.json_data is already loaded before calling this.
+        Ensure compatibility aliases used by other modules.
         """
         merged = self.get_merged_config()
         self.json_merged = merged
 
-        # Convenience attributes for other modules — keep consistent types
+        # convenience typed attributes
         self.mods = merged.get("mods", {})
-        self.params = merged.get("params", [])
-        self.missions = merged.get("missions", [])
+        self.params = list(merged.get("params", []) or [])
+        self.missions = list(merged.get("missions", []) or [])
         self.dlcs = merged.get("dlcs", {})
 
         # Map common password fields and provide backwards-compatible aliases
@@ -190,7 +190,7 @@ class ArmaConfig:
         self.server_password = pwd
         self.game_password = pwd  # alias used by server.py / headless clients
 
-        # Other convenience mappings
+        # common server attributes
         if "maxPlayers" in merged:
             self.max_players = merged.get("maxPlayers")
         if "hostname" in merged:
@@ -202,8 +202,28 @@ class ArmaConfig:
         if "useOCAP" in merged:
             self.use_ocap = merged.get("useOCAP")
         if "numHeadless" in merged:
-            self.headless_clients = merged.get("numHeadless")
-        # ...add other convenience mappings as needed...
+            try:
+                self.headless_clients = int(merged.get("numHeadless"))
+            except Exception:
+                self.headless_clients = merged.get("numHeadless")
+
+        # If params present in merged config, ensure cfg.params reflects that
+        if self.params:
+            self.params = list(self.params)
+        # keep arma_config path as Path
+        if not isinstance(self.arma_config, Path):
+            self.arma_config = Path(str(self.arma_config))
+
+        # --- NEW: determine whether any DLC is active and expose needs_creator ---
+        dlcs_val = merged.get("dlcs", None)
+        needs_creator = False
+        if isinstance(dlcs_val, dict):
+            needs_creator = any(bool(v) for v in dlcs_val.values())
+        elif isinstance(dlcs_val, (list, tuple)):
+            needs_creator = len(dlcs_val) > 0
+        else:
+            needs_creator = False
+        self.needs_creator = bool(needs_creator)
 
         # Clear any previously cached dependent data if JSON changed
         if hasattr(self, "_dependent_cache"):
