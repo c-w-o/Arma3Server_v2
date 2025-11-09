@@ -103,11 +103,12 @@ class ServerLauncher:
         mods = self._mod_param("mod", self.cfg.mods_dir)
         servermods = self._mod_param("serverMod", self.cfg.servermods_dir)
         merged_cfg=self.cfg.get_merged_config()
+        logger.debug(f{merged_cfg})
         for cdlc, active in merged_cfg.get("dlcs", {}):
             if cdlc == "contact":
                 continue
             if not cdlc in self.cfg.dlc_key_map:
-                logger.warning(f("CDLC {cdlc} unknown or not found, cannot resolve short name"))
+                logger.warning(f"CDLC {cdlc} unknown or not found, cannot resolve short name")
             if active:
                 dlc_short=self.cfg.dlc_key_map[cdlc]
                 mods.insert(0, dlc_short)
