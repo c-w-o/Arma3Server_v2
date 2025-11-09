@@ -111,7 +111,7 @@ class ServerLauncher:
                 logger.warning(f"CDLC {cdlc} unknown or not found, cannot resolve short name")
             if active:
                 dlc_short=self.cfg.dlc_key_map[cdlc]
-                mods.insert(0, dlc_short)
+                mods = str(dlc_short) + (";" + mods if len(mods) > 0 else "")
                     
         params = {}
         if getattr(self.cfg, "filePatching", False):
