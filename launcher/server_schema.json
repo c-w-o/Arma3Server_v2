@@ -121,7 +121,7 @@
       "patternProperties": {
         "^[A-Za-z0-9_.-]+$": {
           "type": "object",
-          "required": ["hostname", "dlcs", "mods"],
+          "required": ["hostname"],
           "additionalProperties": false,
           "properties": {
             "description": { "type": "string" },
