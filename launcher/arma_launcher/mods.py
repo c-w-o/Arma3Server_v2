@@ -370,6 +370,7 @@ class ModManager:
         merged_mods = merged.get("mods", {}) or {}
 
         effective = {}
+        
         for k, lst in merged_mods.items():
             effective[k] = list(lst)
 
@@ -381,6 +382,12 @@ class ModManager:
             raw_active = (raw_json.get("configs", {}) or {}).get(active_name, {}) or {}
             minus = raw_active.get("mods", {}).get("minus-mods", []) if isinstance(raw_active.get("mods", {}), dict) else []
 
+        active_dlcs=raw_active.get("dlcs", {})
+        effective["dlcs"]=[]
+        for dlc,active in active_dlcs.items():
+            if active:
+                effective["dlcs"].append((dlc,dlc))
+        
         if minus:
             def _normalize(entry):
                 if isinstance(entry, (list, tuple)) and entry:
@@ -432,14 +439,7 @@ class ModManager:
             seen.add(key)
             combined.append(entry)
         effective["missionMods"] = combined
-        effective.pop("baseMods", None)
-        
-        active_dlcs=raw_active.get("dlcs", {})
-        effective["dlcs"]=[]
-        for dlc,active in active_dlcs.items():
-            if active:
-                effective["dlcs"].append((dlc,dlc))
-                
+        effective.pop("baseMods", None)                
 
         logger.debug(f"effective mods: {effective}")
         return effective
