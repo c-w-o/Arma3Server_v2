@@ -18,7 +18,8 @@
         "hostname",
         "adminPassword",
         "serverCommandPassword",
-        "mods"
+        "mods",
+        "dlcs"
       ],
       "additionalProperties": false,
       "properties": {
@@ -73,7 +74,21 @@
             }
           }
         },
-
+        "dlcs": {
+          "type": "object",
+          "required": ["contact", "csla-iron-curtain", "global-mobilization", "s.o.g-prairie-fire", "western-sahara", "spearhead-1944", "reaction-forces", "expeditionary-forces"],
+          "additionalProperties": false,
+          "properties": {
+            "contact": { "type": "boolean" },
+            "csla-iron-curtain": { "type": "boolean" },
+            "global-mobilization": { "type": "boolean" },
+            "s.o.g-prairie-fire": { "type": "boolean" },
+            "western-sahara": { "type": "boolean" },
+            "spearhead-1944": { "type": "boolean" },
+            "reaction-forces": { "type": "boolean" },
+            "expeditionary-forces": { "type": "boolean" }
+          }
+        },
         "mods": {
           "type": "object",
           "required": ["serverMods", "baseMods", "clientMods", "maps"],
@@ -106,7 +121,7 @@
       "patternProperties": {
         "^[A-Za-z0-9_.-]+$": {
           "type": "object",
-          "required": ["hostname", "DLCs", "mods"],
+          "required": ["hostname", "dlcs", "mods"],
           "additionalProperties": false,
           "properties": {
             "description": { "type": "string" },
@@ -115,17 +130,19 @@
             "useOCAP": { "type": "boolean" },
             "numHeadless": { "type": "integer", "minimum": 0 },
 
-            "DLCs": {
+            "dlcs": {
               "type": "object",
-              "required": ["contact", "csla", "gm", "vn", "ws", "spe"],
+              "required": ["contact", "csla-iron-curtain", "global-mobilization", "s.o.g-prairie-fire", "western-sahara", "spearhead-1944", "reaction-forces", "expeditionary-forces"],
               "additionalProperties": false,
               "properties": {
                 "contact": { "type": "boolean" },
-                "csla": { "type": "boolean" },
-                "gm": { "type": "boolean" },
-                "vn": { "type": "boolean" },
-                "ws": { "type": "boolean" },
-                "spe": { "type": "boolean" }
+                "csla-iron-curtain": { "type": "boolean" },
+                "global-mobilization": { "type": "boolean" },
+                "s.o.g-prairie-fire": { "type": "boolean" },
+                "western-sahara": { "type": "boolean" },
+                "spearhead-1944": { "type": "boolean" },
+                "reaction-forces": { "type": "boolean" },
+                "expeditionary-forces": { "type": "boolean" }
               }
             },
 

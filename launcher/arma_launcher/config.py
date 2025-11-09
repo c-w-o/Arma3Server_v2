@@ -7,7 +7,6 @@ Part of Arma 3 dedicated server launcher for dockerized server instances.
 """
 import os
 import json
-import logging
 from pathlib import Path
 from typing import Optional, Dict
 from arma_launcher.log import get_logger, setup_logger
@@ -108,40 +107,66 @@ class ArmaConfig:
         # Apply JSON overrides if available
         self._apply_json_overrides()
 
+    def get_merged_config(self) -> dict:
+        """
+        Return a merged configuration dict: defaults overridden by active config.
+        - top-level values: active overrides defaults
+        - 'mods': merge keys, concatenate lists (defaults then active)
+        - 'params', 'missions': concatenate defaults then active
+        - 'dlcs': prefer active if present, else defaults
+        """
+        if getattr(self, "_merged_config_cached", None) is not None:
+            return self._merged_config_cached
+
+        json_data = getattr(self, "json_data", None) or {}
+        if not json_data:
+            self._merged_config_cached = {}
+            return self._merged_config_cached
+
+        defaults = json_data.get("defaults", {}) or {}
+        active_name = json_data.get("config-name")
+        active = (json_data.get("configs", {}) or {}).get(active_name, {}) or {}
+
+        merged = {}
+        # shallow merge: active overrides defaults
+        merged.update(defaults)
+        merged.update(active)
+
+        # mods: merge dict keys, concat lists (defaults first)
+        defaults_mods = defaults.get("mods", {}) or {}
+        active_mods = active.get("mods", {}) or {}
+        merged_mods = {}
+        for k in set(defaults_mods.keys()) | set(active_mods.keys()):
+            dlist = defaults_mods.get(k, []) or []
+            alist = active_mods.get(k, []) or []
+            merged_mods[k] = list(dlist) + list(alist)
+        merged["mods"] = merged_mods
+
+        # params, missions: concat lists (defaults then active)
+        merged["params"] = list(defaults.get("params", []) or []) + list(active.get("params", []) or [])
+        merged["missions"] = list(defaults.get("missions", []) or []) + list(active.get("missions", []) or [])
+
+        # dlcs: prefer active value if present, else defaults
+        if "dlcs" in active:
+            merged["dlcs"] = active.get("dlcs")
+        else:
+            merged["dlcs"] = defaults.get("dlcs", {})
+
+        self._merged_config_cached = merged
+        return merged
+
     def _apply_json_overrides(self):
-        if not self.json_data:
-            return
-        active_name = self.json_data.get("config-name")
-        if not active_name:
-            return
-        active_cfg = self.json_data.get("configs", {}).get(active_name, {})
-        if not active_cfg:
-            logger.warning(f"No matching config '{active_name}' found in server.json")
-            return
-        defaults=self.json_data.get("defaults", {})
-        
-        self.use_ocap = active_cfg.get("useOCAP", defaults.get("useOCAP", False))
-        self.headless_clients=active_cfg.get("numHeadless", defaults.get("numHeadless", self.headless_clients))
-        self.limit_fps=active_cfg.get("limitFPS", defaults.get("limitFPS", self.limit_fps))
-        self.game_password=active_cfg.get("serverPassword", defaults.get("serverPassword", ""))
-        self.filePatching=active_cfg.get("filePatching", defaults.get("filePatching", False))
-        logger.warning(f"filePatching is {str(self.filePatching)}")
-        self.mods = active_cfg.get("mods", [])
-        self.servermods = active_cfg.get("servermods", [])
-        self.maps = active_cfg.get("maps", [])
-        self.clientmods = active_cfg.get("client-side-mods", [])
-        # DLCs / additional apps (list of appid strings or objects)
-        self.dlcs = active_cfg.get("dlcs", defaults.get("dlcs", []))
-        logger.info(f"Loaded profile '{active_name}' from JSON (OCAP={self.use_ocap})")
+        """Apply JSON config to object attributes and expose merged view."""
+        # ...existing code that loads self.json_data ...
+        # ensure merged view is available for other modules
+        merged = self.get_merged_config()
+        self.json_merged = merged
+        # convenience attributes
+        self.mods = merged.get("mods", {})
+        self.params = merged.get("params", [])
+        self.missions = merged.get("missions", [])
+        self.dlcs = merged.get("dlcs", {})
 
-    @classmethod
-    def from_env(cls):
-        """Load configuration from environment variables."""
-        data = dict(os.environ)
-        return cls(data)
-
-
-# --- Logging setup ---
 def setup_logging(log_file: Optional[str] = "/arma3/logs/launcher.log"):
     # Delegate logging setup to central logger in arma_launcher.log
     level = os.getenv("LOG_LEVEL", "INFO").upper()

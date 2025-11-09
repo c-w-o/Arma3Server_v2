@@ -63,10 +63,44 @@ class ModManager:
         """
         logger.info("Starting mod synchronization...")
 
-        # --- Install/ensure DLCs / additional apps configured in JSON ---
-        dlcs = getattr(self.cfg, "dlcs", []) or []
-        if dlcs:
-            logger.info(f"Ensuring {len(dlcs)} DLC(s)/apps are installed...")
+        # Use merged config view (defaults + active)
+        merged = self.cfg.get_merged_config()
+        dlcs = merged.get("dlcs", {}) or []
+
+        # Support two shapes:
+        #  - list of appids / dicts -> install via SteamCMD (existing behavior)
+        #  - dict of boolean flags (from server.json dlcs object) -> map to shortnames and link from common_share
+        if isinstance(dlcs, dict):
+            dlc_key_map = {
+                "contact": "contact",
+                "csla-iron-curtain": "csla",
+                "global-mobilization": "gm",
+                "s.o.g-prairie-fire": "vn",
+                "western-sahara": "ws",
+                "spearhead-1944": "spe",
+                "reaction-forces": "rf",
+                "expeditionary-forces": "ef",
+            }
+            logger.info("Applying DLC boolean flags from JSON — linking enabled DLCs from common_share if present.")
+            dlcs_root = self.cfg.common_share / "dlcs"
+            for cfg_key, enabled in dlcs.items():
+                if not enabled:
+                    continue
+                short = dlc_key_map.get(cfg_key)
+                if not short:
+                    logger.debug(f"Unknown DLC key in config, skipping: {cfg_key}")
+                    continue
+                src = dlcs_root / short
+                dst = self.cfg.arma_root / short
+                if not src.exists():
+                    logger.warning(f"DLC configured but not present in common_share: {src}")
+                    continue
+                try:
+                    self._safe_link(src, dst)
+                except Exception as e:
+                    logger.exception(f"Failed linking DLC {short}: {e}")
+        elif isinstance(dlcs, (list, tuple)) and dlcs:
+            logger.info(f"Ensuring {len(dlcs)} DLC(s)/apps are installed via SteamCMD...")
             for entry in dlcs:
                 if isinstance(entry, dict):
                     appid = str(entry.get("appid") or entry.get("id") or "")
@@ -337,38 +371,24 @@ class ModManager:
         then removing any entries mentioned in minus-mods.
         Returns a dict with keys like serverMods, baseMods, clientMods, missionMods, maps.
         """
-        
-        # try to obtain raw config structure (supporting either object or dict)
-        json_data = getattr(self.cfg, "json_data", None)
-        if json_data is None:
-            logger.error("no \"json_data\" found or loaded in internal structure")
-            return {}
-        
-        defaults = json_data.get("defaults", {})
-        configs = json_data.get("configs", {})
-        active_name=json_data.get("config-name", None)
-        
-        if active_name is None:
-            logger.error("no active setup selected")
-            return {}
-        active = configs.get(active_name, {})
-        # try common places for active config
-        
-        defaults_mods = defaults.get("mods", {})
-        active_mods = active.get("mods", {})
-        logger.debug(f"defaults: {defaults}")
-        logger.debug(f"active: {active}")
-        # start with defaults, then extend with active
-        keys = set(list(defaults_mods.keys()) + list(active_mods.keys()))
+        # always use central merged view
+        merged = getattr(self.cfg, "json_merged", None)
+        if merged is None:
+            merged = self.cfg.get_merged_config()
+        merged_mods = merged.get("mods", {}) or {}
+
         effective = {}
-        for k in keys:
-            dlist = defaults_mods.get(k, []) if isinstance(defaults_mods, dict) else []
-            alist = active_mods.get(k, []) if isinstance(active_mods, dict) else []
-            # ensure lists and shallow copy
-            effective[k] = list(dlist) + list(alist)
+        for k, lst in merged_mods.items():
+            effective[k] = list(lst)
 
         # collect minus-mods (from active only)
-        minus = active_mods.get("minus-mods", []) if isinstance(active_mods, dict) else []
+        minus = []
+        raw_json = getattr(self.cfg, "json_data", {}) or {}
+        active_name = raw_json.get("config-name")
+        if active_name:
+            raw_active = (raw_json.get("configs", {}) or {}).get(active_name, {}) or {}
+            minus = raw_active.get("mods", {}).get("minus-mods", []) if isinstance(raw_active.get("mods", {}), dict) else []
+
         if minus:
             def _normalize(entry):
                 if isinstance(entry, (list, tuple)) and entry:
@@ -379,13 +399,12 @@ class ModManager:
 
             to_remove = [_normalize(m) for m in minus]
 
-            for k, lst in effective.items():
+            for k, lst in list(effective.items()):
                 new_lst = []
                 for entry in lst:
                     try:
                         ename, esid = str(entry[0]), str(entry[1]) if entry[1] is not None else None
                     except Exception:
-                        # keep invalid entries unchanged
                         new_lst.append(entry)
                         continue
                     skip = False
@@ -404,7 +423,7 @@ class ModManager:
         for req in ("serverMods", "baseMods", "clientMods", "missionMods", "maps", "extraServer", "extraMission"):
             effective.setdefault(req, [])
 
-        # --- NEW: combine baseMods + missionMods into missionMods and deduplicate ---
+        # combine baseMods + missionMods into missionMods and deduplicate
         combined_src = effective.get("baseMods", []) + effective.get("missionMods", [])
         combined = []
         seen = set()
@@ -412,19 +431,6 @@ class ModManager:
             try:
                 ename = str(entry[0])
                 esid = str(entry[1]) if entry[1] is not None else None
-            except Exception:
-                # fallback for non-pair entries
-                ename = str(entry)
-                esid = None
-            key = (ename, esid)
-            if key in seen:
-                continue
-            seen.add(key)
-            combined.append(entry)
-        effective["missionMods"] = combined        
-        effective.pop("baseMods", None)
-        logger.debug(f"effective mods: {effective}")
-        return effective
-
+           
 
 
