@@ -176,7 +176,6 @@ class ArmaConfig:
         Apply JSON config to object attributes and expose merged view.
         Ensure self.json_data is already loaded before calling this.
         """
-        # existing loading of self.json_data should have happened before
         merged = self.get_merged_config()
         self.json_merged = merged
 
@@ -186,14 +185,16 @@ class ArmaConfig:
         self.missions = merged.get("missions", [])
         self.dlcs = merged.get("dlcs", {})
 
-        # Example common attributes that other code expects (override defaults if present)
-        # Only set if present in merged to avoid creating many attributes unnecessarily.
+        # Map common password fields and provide backwards-compatible aliases
+        pwd = merged.get("serverPassword") or merged.get("server_password") or merged.get("password") or ""
+        self.server_password = pwd
+        self.game_password = pwd  # alias used by server.py / headless clients
+
+        # Other convenience mappings
         if "maxPlayers" in merged:
             self.max_players = merged.get("maxPlayers")
         if "hostname" in merged:
             self.hostname = merged.get("hostname")
-        if "serverPassword" in merged:
-            self.server_password = merged.get("serverPassword")
         if "adminPassword" in merged:
             self.admin_password = merged.get("adminPassword")
         if "serverCommandPassword" in merged:

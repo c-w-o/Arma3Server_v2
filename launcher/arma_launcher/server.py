@@ -238,7 +238,7 @@ class ServerLauncher:
     def _start_headless_clients(self, base_params: dict):
         """Start configured number of headless clients (HCs). Builds HC start strings from params dict."""
         
-        hd_pass = self.cfg.game_password
+        hd_pass = self.cfg.server_password
         for i in range(self.clients):
             # per-HC params: copy base, then set client/connect/port/config/name/password
             hc_params = dict(base_params)
