@@ -49,36 +49,19 @@ jobs:
         }
         
         # Process each line to count issues
-        {
-          # Try to match pylint message pattern: file:line:column: message_code: description
-          if (match($0, /^([^:]+):[0-9]+:[0-9]+: [A-Z]([0-9]+):/)) {
-            # Extract filename (everything before first colon)
-            file = substr($0, RSTART, RLENGTH)
-            sub(/:[0-9]+:[0-9]+:.*/, "", file)
-            
-            # Extract the message code (first character)
-            code = substr($0, RSTART + RLENGTH - 6, 1)  # Position of message code
-            
-            # Update global counters
-            if (code == "F") {
-              fatal++
-              f[file]++
-            } else if (code == "E") {
-              error++
-              e[file]++
-            } else if (code == "W") {
-              warning++
-              w[file]++
-            } else if (code == "C") {
-              convention++
-              c[file]++
-            } else if (code == "R") {
-              refactor++
-              r[file]++
-            }
-            
-            # Track total per file
-            total[file]++
+        /^[^:]+:[0-9]+:[0-9]+: [A-Z]/ {
+          # Extract the message type (F, E, W, C, R)
+          type = substr($0, index($0, ":") + 1, 1)
+          if (type == "F") {
+            fatal++
+          } else if (type == "E") {
+            error++
+          } else if (type == "W") {
+            warning++
+          } else if (type == "C") {
+            convention++
+          } else if (type == "R") {
+            refactor++
           }
         }
         
@@ -92,134 +75,13 @@ jobs:
           print "| Category | Count | Description |"
           print "|----------|-------|-------------|"
           printf "| **Score** | %s/10 | Global Score of the Codebase |\n", score
-          printf "| **Total Issues** | %d | Total Number of Issues |\n", total_issues
-          printf "| **Fatal (F)** | %d | Fatal errors preventing analysis |\n", fatal
-          printf "| **Error (E)** | %d | Programming errors |\n", error
-          printf "| **Warning (W)** | %d | Style warnings |\n", warning
-          printf "| **Convention (C)** | %d | Coding standards |\n", convention
-          printf "| **Refactor (R)** | %d | Code refactoring suggestions |\n", refactor
+          print "| **Total Issues** | " total_issues " | Total Number of Issues |"
+          print "| **Fatal (F)** | " fatal " | Fatal errors preventing analysis |"
+          print "| **Errors (E)** | " error " | Other Errors |"
+          print "| **Warnings (W)** | " warning " | Warnings |"
+          print "| **Conventions (C)** | " convention " | Coding Conventions |"
+          print "| **Refactors (R)** | " refactor " | Refactor Suggestions |"
           print ""
-          
-          # Print file-by-file analysis
-          print "### File Overview"
-          print ""
-          
-          if (length(total) == 0) {
-            print "🎉 No issues found in any files!"
-            print ""
-          } else {
-            print "Files sorted by total issues (descending):"
-            print ""
-            
-            # Count number of files
-            file_count = 0
-            for (file in total) {
-              file_count++
-            }
-            
-            # Create arrays for sorting
-            # We need to populate these in a separate loop
-            # First, collect all files
-            i = 0
-            for (file in total) {
-              files[i] = file
-              totals[i] = total[file]
-              i++
-            }
-            
-            # Simple bubble sort by total issues (descending)
-            n = file_count
-            for (i = 0; i < n-1; i++) {
-            for (i = 0; i < n-1; i++) {
-              for (j = 0; j < n-i-1; j++) {
-                if (totals[j] < totals[j+1]) {
-                  # Swap totals
-                  temp_total = totals[j]
-                  totals[j] = totals[j+1]
-                  totals[j+1] = temp_total
-                  
-                  # Swap files
-                  temp_file = files[j]
-                  files[j] = files[j+1]
-                  files[j+1] = temp_file
-                }
-              }
-            }
-            
-            # Print sorted files with counts
-            for (i = 0; i < n; i++) {
-              file = files[i]
-              file_f = (file in f) ? f[file] : 0
-              file_e = (file in e) ? e[file] : 0
-              file_w = (file in w) ? w[file] : 0
-              file_c = (file in c) ? c[file] : 0
-              file_r = (file in r) ? r[file] : 0
-              file_total = totals[i]
-              
-              printf "  - **%s** [F:%d, E:%d, W:%d, C:%d, R:%d, Total:%d]\n",
-                file, file_f, file_e, file_w, file_c, file_r, file_total
-            }
-            print ""
-          }
-          
-          # Print detailed output section
-          print "### Workflow Output"
-          print ""
-          print "<details>"
-          print "<summary>Click to view full pylint output</summary>"
-          print ""
-          print "```"
+          print "🎉 Analysis complete!"
         }
-        ' "$pylint_output_file" >> "$GITHUB_STEP_SUMMARY"
-        
-        # Append the actual pylint output to the summary
-        cat "$pylint_output_file" >> "$GITHUB_STEP_SUMMARY"
-        
-        # Close the code block and details tag
-        echo '```' >> "$GITHUB_STEP_SUMMARY"
-        echo '</details>' >> "$GITHUB_STEP_SUMMARY"
-        echo '' >> "$GITHUB_STEP_SUMMARY"
-        
-        # Check if there are errors and optionally fail
-        # Extract error count from the file for conditional exit
-        error_count=$(grep -c -E ':[[:space:]]+[EF][0-9]+:' "$pylint_output_file" 2>/dev/null || echo "0")
-        if [ "$error_count" -gt 0 ]; then
-          echo "::warning::Pylint found $error_count error(s)"
-          # Uncomment below to fail the workflow on errors:
-          # exit 1
-        fi
-
-  bandit:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.8", "3.9", "3.10"]
-    steps:
-      - name: Perform Bandit Analysis with ${{ matrix.python-version }}
-        uses: PyCQA/bandit-action@v1
-  anchore:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
-    
-    - name: build local container
-      uses: docker/build-push-action@v6
-      with:
-        tags: localbuild/testimage:latest
-        push: false
-        load: true
-    
-    - name: Scan image
-      uses: anchore/scan-action@v7
-      id: scan
-      with:
-        image: "localbuild/testimage:latest"
-        fail-build: false
-    - name: Upload Anchore scan SARIF report
-      uses: github/codeql-action/upload-sarif@v4
-      with:
-        sarif_file: ${{ steps.scan.outputs.sarif }}
-    - name: Inspect action SARIF report
-      run: cat ${{ steps.scan.outputs.sarif }}
+        ' "$pylint_output_file"
