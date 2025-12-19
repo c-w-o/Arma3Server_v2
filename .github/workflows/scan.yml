@@ -219,6 +219,7 @@ jobs:
     
     - name: Scan image
       uses: anchore/scan-action@v6
+      id: scan
       with:
         image: "localbuild/testimage:latest"
         fail-build: false
