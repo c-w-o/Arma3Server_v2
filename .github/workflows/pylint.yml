@@ -3,7 +3,7 @@ name: Pylint
 on: [push]
 
 jobs:
-  build:
+  pylint:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -52,35 +52,38 @@ jobs:
           }
         }
         
-        # Count overall categories and collect file data
-        /^[^:]+:[0-9]+:[0-9]+:[[:space:]]+[A-Z][0-9]+:/ {
-          # Extract filename (everything before first colon)
-          file = $0
-          sub(/:[0-9]+:[0-9]+:.*/, "", file)
-          
-          # Extract the message code
-          code = substr($4, 1, 1)
-          
-          # Update global counters
-          if (code == "F") {
-            fatal++
-            f[file]++
-          } else if (code == "E") {
-            error++
-            e[file]++
-          } else if (code == "W") {
-            warning++
-            w[file]++
-          } else if (code == "C") {
-            convention++
-            c[file]++
-          } else if (code == "R") {
-            refactor++
-            r[file]++
+        # Process each line to count issues
+        {
+          # Try to match pylint message pattern: file:line:column: message_code: description
+          if (match($0, /^([^:]+):[0-9]+:[0-9]+: [A-Z]([0-9]+):/)) {
+            # Extract filename (everything before first colon)
+            file = substr($0, RSTART, RLENGTH)
+            sub(/:[0-9]+:[0-9]+:.*/, "", file)
+            
+            # Extract the message code (first character)
+            code = substr($0, RSTART + RLENGTH - 6, 1)  # Position of message code
+            
+            # Update global counters
+            if (code == "F") {
+              fatal++
+              f[file]++
+            } else if (code == "E") {
+              error++
+              e[file]++
+            } else if (code == "W") {
+              warning++
+              w[file]++
+            } else if (code == "C") {
+              convention++
+              c[file]++
+            } else if (code == "R") {
+              refactor++
+              r[file]++
+            }
+            
+            # Track total per file
+            total[file]++
           }
-          
-          # Track total per file
-          total[file]++
         }
         
         END {
@@ -119,16 +122,26 @@ jobs:
             print "Files sorted by total issues (descending):"
             print ""
             
-            # Create an array of files with their totals for sorting
-            i = 0
+            # Count number of files
+            file_count = 0
             for (file in total) {
-              files[i] = file
-              totals[i] = total[file]
-              i++
+              file_count++
+            }
+            
+            # Create arrays for sorting
+            for (i = 0; i < file_count; i++) {
+              # We need to populate these in a separate loop
+              # First, collect all files
+              j = 0
+              for (file in total) {
+                files[j] = file
+                totals[j] = total[file]
+                j++
+              }
             }
             
             # Simple bubble sort by total issues (descending)
-            n = i
+            n = file_count
             for (i = 0; i < n-1; i++) {
               for (j = 0; j < n-i-1; j++) {
                 if (totals[j] < totals[j+1]) {
@@ -187,3 +200,20 @@ jobs:
           # Uncomment below to fail the workflow on errors:
           # exit 1
         fi
+
+  bandit:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10"]
+    permissions:
+      # required for all workflows
+      security-events: write
+      # only required for workflows in private repositories
+      actions: read
+      contents: read
+    steps:
+      - name: Perform Bandit Analysis with ${{ matrix.python-version }}
+        uses: PyCQA/bandit-action@v1
+        with:
+          python-version: ${{ matrix.python-version }}
