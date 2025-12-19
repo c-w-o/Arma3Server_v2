@@ -118,19 +118,18 @@ jobs:
             }
             
             # Create arrays for sorting
-            for (i = 0; i < file_count; i++) {
-              # We need to populate these in a separate loop
-              # First, collect all files
-              j = 0
-              for (file in total) {
-                files[j] = file
-                totals[j] = total[file]
-                j++
-              }
+            # We need to populate these in a separate loop
+            # First, collect all files
+            i = 0
+            for (file in total) {
+              files[i] = file
+              totals[i] = total[file]
+              i++
             }
             
             # Simple bubble sort by total issues (descending)
             n = file_count
+            for (i = 0; i < n-1; i++) {
             for (i = 0; i < n-1; i++) {
               for (j = 0; j < n-i-1; j++) {
                 if (totals[j] < totals[j+1]) {
