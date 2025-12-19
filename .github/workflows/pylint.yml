@@ -26,84 +26,164 @@ jobs:
         # Run pylint and capture output (both stdout and stderr)
         pylint $(git ls-files '*.py') > "$pylint_output_file" 2>&1 || true
         
-        # Extract the score if present
-        pylint_score=$(grep -oP 'Your code has been rated at \K[0-9.]+' "$pylint_output_file" | head -1 || echo "N/A")
-        
-        # Count errors (E, F message codes) and warnings (W, C, R message codes)
-        # E = Error, F = Fatal, W = Warning, C = Convention, R = Refactor
-        errors=$(grep -c -E ':[[:space:]]+[EF][0-9]+:' "$pylint_output_file" || true)
-        errors=${errors:-0}
-        warnings=$(grep -c -E ':[[:space:]]+[WCR][0-9]+:' "$pylint_output_file" || true)
-        warnings=${warnings:-0}
-        
-        # Get summary statistics by category
-        fatal_count=$(grep -c -E ':[[:space:]]+F[0-9]+:' "$pylint_output_file" || true)
-        fatal_count=${fatal_count:-0}
-        error_count=$(grep -c -E ':[[:space:]]+E[0-9]+:' "$pylint_output_file" || true)
-        error_count=${error_count:-0}
-        warning_count=$(grep -c -E ':[[:space:]]+W[0-9]+:' "$pylint_output_file" || true)
-        warning_count=${warning_count:-0}
-        convention_count=$(grep -c -E ':[[:space:]]+C[0-9]+:' "$pylint_output_file" || true)
-        convention_count=${convention_count:-0}
-        refactor_count=$(grep -c -E ':[[:space:]]+R[0-9]+:' "$pylint_output_file" || true)
-        refactor_count=${refactor_count:-0}
-        
-        # Get top 5 files with most issues
-        top_files=$(grep -E '^[^:]+:[0-9]+:[0-9]+:' "$pylint_output_file" 2>/dev/null | \
-                    cut -d: -f1 | \
-                    sort | uniq -c | sort -rn | head -5 | \
-                    awk '{print "  - " $2 ": " $1 " issues"}')
-        
-        # Format the summary
-        echo "## 🔍 Pylint Analysis Results (Python ${{ matrix.python-version }})" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        echo "### 📊 Summary" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
-        echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
-        echo "| **Score** | $pylint_score/10 |" >> $GITHUB_STEP_SUMMARY
-        echo "| **Total Issues** | $((errors + warnings)) |" >> $GITHUB_STEP_SUMMARY
-        echo "| **Errors (E/F)** | $errors |" >> $GITHUB_STEP_SUMMARY
-        echo "| **Warnings (W/C/R)** | $warnings |" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        echo "### 📈 Breakdown by Category" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "| Category | Count |" >> $GITHUB_STEP_SUMMARY
-        echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
-        echo "| **Fatal (F)** | $fatal_count |" >> $GITHUB_STEP_SUMMARY
-        echo "| **Error (E)** | $error_count |" >> $GITHUB_STEP_SUMMARY
-        echo "| **Warning (W)** | $warning_count |" >> $GITHUB_STEP_SUMMARY
-        echo "| **Convention (C)** | $convention_count |" >> $GITHUB_STEP_SUMMARY
-        echo "| **Refactor (R)** | $refactor_count |" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        if [ -n "$top_files" ]; then
-          echo "### 📋 Top Files with Issues" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "$top_files" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-        fi
-        
-        # Add detailed output in collapsed section
-        echo "### 📝 Detailed Output" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "<details>" >> $GITHUB_STEP_SUMMARY
-        echo "<summary>Click to view full pylint output</summary>" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-        cat "$pylint_output_file" >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-        echo "</details>" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        # Show the output in console as well
+        # Show output in console
         cat "$pylint_output_file"
         
-        # Exit with non-zero if there are errors (optional)
-        if [ "$errors" -gt 0 ]; then
-          echo "::warning::Pylint found $errors error(s)"
+        # Use awk to parse and format the entire summary
+        awk -v python_version="${{ matrix.python-version }}" '
+        BEGIN {
+          # Initialize counters
+          score = "N/A"
+          fatal = 0; error = 0; warning = 0; convention = 0; refactor = 0
+          
+          # Print header
+          print "## 🔍 Pylint Analysis Results (Python " python_version ")"
+          print ""
+          print "### 📊 Overall Summary"
+          print ""
+          print "| Metric | Value |"
+          print "|--------|-------|"
+        }
+        
+        # Extract score
+        /Your code has been rated at [0-9.]+/ {
+          if (match($0, /rated at ([0-9.]+)/, arr)) {
+            score = arr[1]
+          }
+        }
+        
+        # Count overall categories and collect file data
+        /^[^:]+:[0-9]+:[0-9]+:[[:space:]]+[A-Z][0-9]+:/ {
+          # Extract filename (everything before first colon)
+          file = $0
+          sub(/:[0-9]+:[0-9]+:.*/, "", file)
+          
+          # Extract the message code
+          code = substr($4, 1, 1)
+          
+          # Update global counters
+          if (code == "F") {
+            fatal++
+            f[file]++
+          } else if (code == "E") {
+            error++
+            e[file]++
+          } else if (code == "W") {
+            warning++
+            w[file]++
+          } else if (code == "C") {
+            convention++
+            c[file]++
+          } else if (code == "R") {
+            refactor++
+            r[file]++
+          }
+          
+          # Track total per file
+          total[file]++
+        }
+        
+        END {
+          # Calculate totals
+          total_errors = fatal + error
+          total_warnings = warning + convention + refactor
+          total_issues = total_errors + total_warnings
+          
+          # Print summary table
+          printf "| **Score** | %s/10 |\n", score
+          printf "| **Total Issues** | %d |\n", total_issues
+          printf "| **Errors (E/F)** | %d |\n", total_errors
+          printf "| **Warnings (W/C/R)** | %d |\n", total_warnings
+          print ""
+          
+          # Print category breakdown
+          print "### 📈 Breakdown by Category"
+          print ""
+          print "| Category | Count | Description |"
+          print "|----------|-------|-------------|"
+          printf "| **Fatal (F)** | %d | Fatal errors preventing analysis |\n", fatal
+          printf "| **Error (E)** | %d | Programming errors |\n", error
+          printf "| **Warning (W)** | %d | Style warnings |\n", warning
+          printf "| **Convention (C)** | %d | Coding standards |\n", convention
+          printf "| **Refactor (R)** | %d | Code refactoring suggestions |\n", refactor
+          print ""
+          
+          # Print file-by-file analysis
+          print "### 📋 File-by-File Analysis"
+          print ""
+          
+          if (length(total) == 0) {
+            print "🎉 No issues found in any files!"
+            print ""
+          } else {
+            print "Files sorted by total issues (descending):"
+            print ""
+            
+            # Create an array of files with their totals for sorting
+            i = 0
+            for (file in total) {
+              files[i] = file
+              totals[i] = total[file]
+              i++
+            }
+            
+            # Simple bubble sort by total issues (descending)
+            n = i
+            for (i = 0; i < n-1; i++) {
+              for (j = 0; j < n-i-1; j++) {
+                if (totals[j] < totals[j+1]) {
+                  # Swap totals
+                  temp_total = totals[j]
+                  totals[j] = totals[j+1]
+                  totals[j+1] = temp_total
+                  
+                  # Swap files
+                  temp_file = files[j]
+                  files[j] = files[j+1]
+                  files[j+1] = temp_file
+                }
+              }
+            }
+            
+            # Print sorted files with counts
+            for (i = 0; i < n; i++) {
+              file = files[i]
+              file_f = (file in f) ? f[file] : 0
+              file_e = (file in e) ? e[file] : 0
+              file_w = (file in w) ? w[file] : 0
+              file_c = (file in c) ? c[file] : 0
+              file_r = (file in r) ? r[file] : 0
+              file_total = totals[i]
+              
+              printf "  - **%s** [F:%d, E:%d, W:%d, C:%d, R:%d, Total:%d]\n",
+                file, file_f, file_e, file_w, file_c, file_r, file_total
+            }
+            print ""
+          }
+          
+          # Print detailed output section
+          print "### 📝 Detailed Output"
+          print ""
+          print "<details>"
+          print "<summary>Click to view full pylint output</summary>"
+          print ""
+          print "```"
+        }
+        ' "$pylint_output_file" >> "$GITHUB_STEP_SUMMARY"
+        
+        # Append the actual pylint output to the summary
+        cat "$pylint_output_file" >> "$GITHUB_STEP_SUMMARY"
+        
+        # Close the code block and details tag
+        echo '```' >> "$GITHUB_STEP_SUMMARY"
+        echo '</details>' >> "$GITHUB_STEP_SUMMARY"
+        echo '' >> "$GITHUB_STEP_SUMMARY"
+        
+        # Check if there are errors and optionally fail
+        # Extract error count from the file for conditional exit
+        error_count=$(grep -c -E ':[[:space:]]+[EF][0-9]+:' "$pylint_output_file" 2>/dev/null || echo "0")
+        if [ "$error_count" -gt 0 ]; then
+          echo "::warning::Pylint found $error_count error(s)"
           # Uncomment below to fail the workflow on errors:
           # exit 1
         fi
