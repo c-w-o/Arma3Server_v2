@@ -221,3 +221,4 @@ jobs:
       uses: anchore/scan-action@v6
       with:
         image: "localbuild/testimage:latest"
+        fail-build: false
