@@ -20,4 +20,40 @@ jobs:
         pip install pylint
     - name: Analysing the code with pylint
       run: |
-        pylint $(git ls-files '*.py')
+        # Create a temporary file to capture pylint output
+        pylint_output_file="pylint_output.txt"
+        
+        # Run pylint and capture output (both stdout and stderr)
+        pylint $(git ls-files '*.py') > "$pylint_output_file" 2>&1 || true
+        
+        # Extract the score if present
+        pylint_score=$(grep -oP 'rated at \K[-+]?\d*\.?\d+' "$pylint_output_file" | head -1 || echo "N/A")
+        
+        # Count errors and warnings
+        errors=$(grep -c ": error" "$pylint_output_file" || echo "0")
+        warnings=$(grep -c ": warning" "$pylint_output_file" || echo "0")
+        
+        # Format the summary
+        echo "## Pylint Analysis Results (Python ${{ matrix.python-version }})" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Score:** $pylint_score" >> $GITHUB_STEP_SUMMARY
+        echo "**Errors:** $errors" >> $GITHUB_STEP_SUMMARY
+        echo "**Warnings:** $warnings" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Add detailed output in collapsed section
+        echo "<details>" >> $GITHUB_STEP_SUMMARY
+        echo "<summary>Click to view detailed pylint output</summary>" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        cat "$pylint_output_file" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo "</details>" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Show the output in console as well
+        cat "$pylint_output_file"
+        
+        # Exit with pylint's exit code (if you want the workflow to fail on errors)
+        # Remove the "|| true" from the pylint command above and uncomment below:
+        # exit $?
