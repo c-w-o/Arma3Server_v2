@@ -21,7 +21,7 @@ updates:
 
 
   # Enable version updates for Docker
-  - package-ecosystem: "GitHub Actions"
+  - package-ecosystem: "github-actions"
     # Look for a `Dockerfile` in the `root` directory
     directory: "/"
     # Check for updates once a week
