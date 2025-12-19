@@ -97,6 +97,26 @@ jobs:
           print ""
           print "🎉 Analysis complete!"
         }
+        ' "$pylint_output_file" >> "$GITHUB_STEP_SUMMARY"
+        
+        # Append the actual pylint output to the summary
+        cat "$pylint_output_file" >> "$GITHUB_STEP_SUMMARY"
+        
+        # Close the code block and details tag
+        echo '```' >> "$GITHUB_STEP_SUMMARY"
+        echo '</details>' >> "$GITHUB_STEP_SUMMARY"
+        echo '' >> "$GITHUB_STEP_SUMMARY"
+        
+        # Check if there are errors and optionally fail
+        # Extract error count from the file for conditional exit
+        error_count=$(grep -c -E ':[[:space:]]+[EF][0-9]+:' "$pylint_output_file" 2>/dev/null || echo "0")
+        if [ "$error_count" -gt 0 ]; then
+          echo "::warning::Pylint found $error_count error(s)"
+          # Uncomment below to fail the workflow on errors:
+          # exit 1
+        fi
+
+
 
 
   bandit:
