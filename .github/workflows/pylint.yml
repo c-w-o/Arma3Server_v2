@@ -39,10 +39,6 @@ jobs:
           # Print header
           print "## 🔍 Pylint Analysis Results (Python " python_version ")"
           print ""
-          print "### 📊 Overall Summary"
-          print ""
-          print "| Metric | Value |"
-          print "|--------|-------|"
         }
         
         # Extract score
@@ -91,7 +87,7 @@ jobs:
           total_issues = fatal + error + warning + convention + refactor
           
           # Print category breakdown
-          print "###Breakdown by Category"
+          print "###Summary"
           print ""
           print "| Category | Count | Description |"
           print "|----------|-------|-------------|"
