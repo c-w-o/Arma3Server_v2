@@ -88,22 +88,15 @@ jobs:
         
         END {
           # Calculate totals
-          total_errors = fatal + error
-          total_warnings = warning + convention + refactor
-          total_issues = total_errors + total_warnings
-          
-          # Print summary table
-          printf "| **Score** | %s/10 |\n", score
-          printf "| **Total Issues** | %d |\n", total_issues
-          printf "| **Errors (E/F)** | %d |\n", total_errors
-          printf "| **Warnings (W/C/R)** | %d |\n", total_warnings
-          print ""
+          total_issues = fatal + error + warning + convention + refactor
           
           # Print category breakdown
-          print "### 📈 Breakdown by Category"
+          print "###Breakdown by Category"
           print ""
           print "| Category | Count | Description |"
           print "|----------|-------|-------------|"
+          printf "| **Score** | %s/10 | Gobal Score of the Codebase |\n", score
+          printf "| **Total Issues** | %d | Total Number of Issues |\n", total_issues
           printf "| **Fatal (F)** | %d | Fatal errors preventing analysis |\n", fatal
           printf "| **Error (E)** | %d | Programming errors |\n", error
           printf "| **Warning (W)** | %d | Style warnings |\n", warning
@@ -112,7 +105,7 @@ jobs:
           print ""
           
           # Print file-by-file analysis
-          print "### 📋 File-by-File Analysis"
+          print "###File Overview"
           print ""
           
           if (length(total) == 0) {
@@ -175,7 +168,7 @@ jobs:
           }
           
           # Print detailed output section
-          print "### 📝 Detailed Output"
+          print "### Workflow Output"
           print ""
           print "<details>"
           print "<summary>Click to view full pylint output</summary>"
