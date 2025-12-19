@@ -204,7 +204,7 @@ jobs:
     steps:
       - name: Perform Bandit Analysis with ${{ matrix.python-version }}
         uses: PyCQA/bandit-action@v1
-  anchor:
+  anchore:
     runs-on: ubuntu-latest
     steps:
     - name: Set up Docker Buildx
