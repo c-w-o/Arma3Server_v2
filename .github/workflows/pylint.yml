@@ -215,5 +215,3 @@ jobs:
     steps:
       - name: Perform Bandit Analysis with ${{ matrix.python-version }}
         uses: PyCQA/bandit-action@v1
-        with:
-          python-version: ${{ matrix.python-version }}
