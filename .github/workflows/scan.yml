@@ -222,3 +222,9 @@ jobs:
       with:
         image: "localbuild/testimage:latest"
         fail-build: false
+    - name: Upload Anchore scan SARIF report
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ steps.scan.outputs.sarif }}
+    - name: Inspect action SARIF report
+      run: cat ${{ steps.scan.outputs.sarif }}
