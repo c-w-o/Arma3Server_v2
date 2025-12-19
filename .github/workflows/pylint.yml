@@ -87,7 +87,7 @@ jobs:
           total_issues = fatal + error + warning + convention + refactor
           
           # Print category breakdown
-          print "###Summary"
+          print "### Summary"
           print ""
           print "| Category | Count | Description |"
           print "|----------|-------|-------------|"
@@ -101,7 +101,7 @@ jobs:
           print ""
           
           # Print file-by-file analysis
-          print "###File Overview"
+          print "### File Overview"
           print ""
           
           if (length(total) == 0) {
