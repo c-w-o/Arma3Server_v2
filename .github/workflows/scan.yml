@@ -91,7 +91,7 @@ jobs:
           print ""
           print "| Category | Count | Description |"
           print "|----------|-------|-------------|"
-          printf "| **Score** | %s/10 | Gobal Score of the Codebase |\n", score
+          printf "| **Score** | %s/10 | Global Score of the Codebase |\n", score
           printf "| **Total Issues** | %d | Total Number of Issues |\n", total_issues
           printf "| **Fatal (F)** | %d | Fatal errors preventing analysis |\n", fatal
           printf "| **Error (E)** | %d | Programming errors |\n", error
