@@ -195,12 +195,6 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.8", "3.9", "3.10"]
-    permissions:
-      # required for all workflows
-      security-events: write
-      # only required for workflows in private repositories
-      actions: read
-      contents: read
     steps:
       - name: Perform Bandit Analysis with ${{ matrix.python-version }}
         uses: PyCQA/bandit-action@v1
