@@ -131,10 +131,11 @@ jobs:
           echo "## 🔍 Ruff Analysis Results" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           
-          if [ -z "$ruff_output" ]; then
+          if [ -z "$ruff_output" ] || [ "$(echo "$ruff_output" | jq 'length')" -eq 0 ]; then
             echo "✅ No issues found!" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "$ruff_output" | jq -r '.[] | "\(.filename): \(.messages | length) issue(s)"' >> "$GITHUB_STEP_SUMMARY"
+            issue_count=$(echo "$ruff_output" | jq 'length')
+            echo "Found $issue_count issue(s)" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
             echo '<details><summary>Full Ruff Output</summary>' >> "$GITHUB_STEP_SUMMARY"
             echo '```json' >> "$GITHUB_STEP_SUMMARY"
