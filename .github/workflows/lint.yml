@@ -110,4 +110,46 @@ jobs:
           # Uncomment below to fail the workflow on errors:
           # exit 1
         fi
-    
+
+  ruff:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.10"
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install ruff
+    - name: Run ruff
+      run: |
+        echo '## 🔍 Ruff Linting Results' >> "$GITHUB_STEP_SUMMARY"
+        echo '' >> "$GITHUB_STEP_SUMMARY"
+        echo '```' >> "$GITHUB_STEP_SUMMARY"
+        ruff check $(git ls-files '*.py') --output-format=github 2>&1 | tee -a "$GITHUB_STEP_SUMMARY" || true
+        echo '```' >> "$GITHUB_STEP_SUMMARY"
+        echo '' >> "$GITHUB_STEP_SUMMARY"
+
+  pyre:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.10"
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyre-check
+    - name: Run pyre
+      run: |
+        echo '## 🔍 Pyre Type Checking Results' >> "$GITHUB_STEP_SUMMARY"
+        echo '' >> "$GITHUB_STEP_SUMMARY"
+        echo '```' >> "$GITHUB_STEP_SUMMARY"
+        pyre check 2>&1 | tee -a "$GITHUB_STEP_SUMMARY" || true
+        echo '```' >> "$GITHUB_STEP_SUMMARY"
+        echo '' >> "$GITHUB_STEP_SUMMARY"
+
