@@ -35,20 +35,6 @@ updates:
       - "dependencies"
       - "docker"
 
-  - package-ecosystem: "docker-compose"
-    directory: "./"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "04:00"
-    open-pull-requests-limit: 3
-    rebase-strategy: "auto"
-    commit-message:
-      prefix: "chore(docker):"
-    labels:
-      - "dependencies"
-      - "compose"
-
   # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
