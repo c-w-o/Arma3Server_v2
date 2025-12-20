@@ -139,16 +139,7 @@ jobs:
           
           if [ -z "$ruff_output" ] || [ "$(echo "$ruff_output" | jq '. | length')" -eq 0 ]; then
             echo "✅ No issues found!" >> "$GITHUB_STEP_SUMMARY"
-              else
-            echo "$ruff_output" | jq -r '.[] | "\(.filename):\(.location.row):\(.location.column): \(.code) \(.message)"' >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            
-            echo '<details><summary>Full Ruff Output</summary>' >> "$GITHUB_STEP_SUMMARY"
-            echo '```json' >> "$GITHUB_STEP_SUMMARY"
-            echo "$ruff_output" | jq '.' >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-            echo '</details>' >> "$GITHUB_STEP_SUMMARY"
-            
+          else
             # Count issues by severity (E=Error, W=Warning)
             total_issues=$(echo "$ruff_output" | jq '. | length')
             error=$(echo "$ruff_output" | jq '[.[] | select(.code | startswith("E"))] | length')
@@ -162,6 +153,14 @@ jobs:
             echo "| **Total Issues** | $total_issues | Total Number of Issues |" >> "$GITHUB_STEP_SUMMARY"
             echo "| **Errors (E)** | $error | PEP 8 Errors |" >> "$GITHUB_STEP_SUMMARY"
             echo "| **Warnings (W)** | $warning | Warnings |" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            
+            # Print detailed table
+            echo "### Issues" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "| File | Line | Column | Code | Message |" >> "$GITHUB_STEP_SUMMARY"
+            echo "|------|------|--------|------|---------|" >> "$GITHUB_STEP_SUMMARY"
+            echo "$ruff_output" | jq -r '.[] | "| \(.filename) | \(.location.row) | \(.location.column) | \(.code) | \(.message) |"' >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
             echo "🎉 Analysis complete!" >> "$GITHUB_STEP_SUMMARY"
           fi
