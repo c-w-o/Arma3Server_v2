@@ -1,4 +1,4 @@
-FROM debian:bullseye-20251208-slim
+FROM debian:stable-slim
 
 LABEL maintainer="CWO - github.com/c-w-o"
 LABEL org.opencontainers.image.source=https://github.com/c-w-o/arma3server_v2
