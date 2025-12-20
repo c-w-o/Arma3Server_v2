@@ -86,9 +86,6 @@ jobs:
         with:
           sarif_file: 'trivy-fs-results.sarif'
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
   trivy_image:
     permissions:
       # required for all workflows
@@ -98,6 +95,9 @@ jobs:
       contents: read
     runs-on: ubuntu-latest
     steps:
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
       - name: build local container
         uses: docker/build-push-action@v6
         with:
