@@ -92,22 +92,16 @@ jobs:
           print ""
           print "🎉 Analysis complete!"
         }
-
-        echo '<details>' >> "$GITHUB_STEP_SUMMARY"
         ' "$pylint_output_file" >> "$GITHUB_STEP_SUMMARY"
         
         # Append the actual pylint output to the summary
-
-        cat "$pylint_output_file" >> "$GITHUB_STEP_SUMMARY"
-
-        
-
-        # Close the code block and details tag
-
+        echo '<details><summary> Full Pylint Output</summary>' >> "$GITHUB_STEP_SUMMARY"
+        echo '' >> "$GITHUB_STEP_SUMMARY"
         echo '```' >> "$GITHUB_STEP_SUMMARY"
-
+        cat "$pylint_output_file" >> "$GITHUB_STEP_SUMMARY"
+        echo '```' >> "$GITHUB_STEP_SUMMARY"
+        echo '' >> "$GITHUB_STEP_SUMMARY"
         echo '</details>' >> "$GITHUB_STEP_SUMMARY"
-
         echo '' >> "$GITHUB_STEP_SUMMARY"
         
         # Check if there are errors and optionally fail
@@ -133,7 +127,7 @@ jobs:
           ruff_output_file="ruff_output.txt"
           
           # Run ruff and capture output
-          ruff check . > "$ruff_output_file" 2>&1 || true
+          ruff check --exit-zero . > "$ruff_output_file" 2>&1 || true
           
           # Show output in console
           cat "$ruff_output_file"
