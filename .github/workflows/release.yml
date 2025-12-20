@@ -17,7 +17,7 @@ jobs:
       - name: Run Buildx build and push
         uses: docker/build-push-action@v6
         with:
-          tags: c-w-o/Arma3Server:${{ github.event.release.tag_name }}
+          tags: c-w-o/arma3server:${{ github.event.release.tag_name }}
           push: false
           load: true
       - name: Upload Release Assets
@@ -25,4 +25,4 @@ jobs:
         with:
           tag_name: ${{ github.event.release.tag_name }}
           files: |
-            c-w-o/Arma3Server:${{ github.event.release.tag_name }}
+            c-w-o/arma3server:${{ github.event.release.tag_name }}
