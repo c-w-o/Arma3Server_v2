@@ -95,10 +95,12 @@ jobs:
         ' "$pylint_output_file" >> "$GITHUB_STEP_SUMMARY"
         
         # Append the actual pylint output to the summary
-        cat "$pylint_output_file" >> "$GITHUB_STEP_SUMMARY"
-        
-        # Close the code block and details tag
+        echo '<details><summary> Full Pylint Output</summary>' >> "$GITHUB_STEP_SUMMARY"
+        echo '' >> "$GITHUB_STEP_SUMMARY"
         echo '```' >> "$GITHUB_STEP_SUMMARY"
+        cat "$pylint_output_file" >> "$GITHUB_STEP_SUMMARY"
+        echo '```' >> "$GITHUB_STEP_SUMMARY"
+        echo '' >> "$GITHUB_STEP_SUMMARY"
         echo '</details>' >> "$GITHUB_STEP_SUMMARY"
         echo '' >> "$GITHUB_STEP_SUMMARY"
         
@@ -115,8 +117,72 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/ruff-action@v3
+      - name: Set up Ruff
+        uses: astral-sh/ruff-action@v3
         with:
           version: "latest"
-      - run: ruff check
+      - name: Run Ruff and parse output
+        run: |
+          # Create a temporary file to capture ruff output
+          ruff_output_file="ruff_output.txt"
+          
+          # Run ruff and capture output
+          ruff check . > "$ruff_output_file" 2>&1 || true
+          
+          # Show output in console
+          cat "$ruff_output_file"
+          
+          # Parse and format ruff output
+          awk '
+          BEGIN {
+            error = 0
+            warning = 0
+            
+            # Print header
+            print "## 🔍 Ruff Analysis Results"
+            print ""
+          }
+          
+          # Count errors and warnings from GitHub annotation format
+          /::error/ {
+            error++
+            next
+          }
+          /::warning/ {
+            warning++
+            next
+          }
+          
+          # Also count from standard ruff output format
+          /^[^:]+:[0-9]+:[0-9]+: [A-Z]/ {
+            code = substr($0, index($0, ":") + 1)
+            if (code ~ /^[[:space:]]*[EF]/) {
+              error++
+            } else if (code ~ /^[[:space:]]*W/) {
+              warning++
+            }
+          }
+          
+          END {
+            total_issues = error + warning
+            
+            # Print category breakdown
+            print "### Summary"
+            print ""
+            print "| Category | Count |"
+            print "|----------|-------|"
+            print "| **Total Issues** | " total_issues " |"
+            print "| **Errors** | " error " |"
+            print "| **Warnings** | " warning " |"
+            print ""
+          }
+          ' "$ruff_output_file" >> "$GITHUB_STEP_SUMMARY"
+          
+          # Append full output to summary
+          echo '<details><summary>Full Ruff Output</summary>' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat "$ruff_output_file" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo '</details>' >> "$GITHUB_STEP_SUMMARY"
 
