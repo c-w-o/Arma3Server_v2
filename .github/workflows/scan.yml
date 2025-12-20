@@ -30,6 +30,12 @@ jobs:
       - name: Perform Bandit Analysis with ${{ matrix.python-version }}
         uses: PyCQA/bandit-action@v1
   anchore:
+    permissions:
+      # required for all workflows
+      security-events: write
+      # only required for workflows in private repositories
+      actions: read
+      contents: read
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
@@ -57,6 +63,12 @@ jobs:
       run: cat ${{ steps.scan.outputs.sarif }}
 
   trivy:
+    permissions:
+      # required for all workflows
+      security-events: write
+      # only required for workflows in private repositories
+      actions: read
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
