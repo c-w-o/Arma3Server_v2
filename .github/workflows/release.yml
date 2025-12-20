@@ -19,10 +19,11 @@ jobs:
         with:
           tags: c-w-o/arma3server:${{ github.event.release.tag_name }}
           push: false
-          load: true
+          load: false
+          outputs: type=docker,dest=/tmp/arma3server-${{ github.event.release.tag_name }}.tar
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.release.tag_name }}
           files: |
-            c-w-o/arma3server:${{ github.event.release.tag_name }}
+            /tmp/arma3server-${{ github.event.release.tag_name }}.tar
