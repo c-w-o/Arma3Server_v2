@@ -12,6 +12,8 @@ on:
 
 jobs:
   pylint:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -114,6 +116,8 @@ jobs:
         fi
 
   ruff:
+    permissions:
+      contents: read
     strategy:
       matrix:
         python-version: ["3.8", "3.9", "3.10"]
