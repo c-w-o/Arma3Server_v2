@@ -45,7 +45,7 @@ jobs:
           fatal = 0; error = 0; warning = 0; convention = 0; refactor = 0
           
           # Print header
-          print "## 🔍 Pylint Analysis Results (Python " python_version ")"
+          print "## Pylint Analysis Results (Python " python_version ")"
           print ""
         }
         
@@ -130,31 +130,17 @@ jobs:
         if: always()
         run: |
           ruff_output=$(cat ruff_output.json)
+          python_version="${{ matrix.python-version }}"
           total_issues=0
           error=0
           warning=0
           
-          echo "## 🔍 Ruff Analysis Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "## Ruff Analysis Results (Python $python_version)" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           
           if [ -z "$ruff_output" ] || [ "$(echo "$ruff_output" | jq '. | length')" -eq 0 ]; then
             echo "✅ No issues found!" >> "$GITHUB_STEP_SUMMARY"
-          else
-            # Count issues by severity (E=Error, W=Warning)
-            total_issues=$(echo "$ruff_output" | jq '. | length')
-            error=$(echo "$ruff_output" | jq '[.[] | select(.code | startswith("E"))] | length')
-            warning=$(echo "$ruff_output" | jq '[.[] | select(.code | startswith("W"))] | length')
-
-            # Print summary
-            echo "### Summary" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "| Category | Count | Description |" >> "$GITHUB_STEP_SUMMARY"
-            echo "|----------|-------|-------------|" >> "$GITHUB_STEP_SUMMARY"
-            echo "| **Total Issues** | $total_issues | Total Number of Issues |" >> "$GITHUB_STEP_SUMMARY"
-            echo "| **Errors (E)** | $error | PEP 8 Errors |" >> "$GITHUB_STEP_SUMMARY"
-            echo "| **Warnings (W)** | $warning | Warnings |" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            
+          else            
             # Print detailed table
             echo "### Issues" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -162,6 +148,5 @@ jobs:
             echo "|------|------|--------|------|---------|" >> "$GITHUB_STEP_SUMMARY"
             echo "$ruff_output" | jq -r '.[] | "| \(.filename) | \(.location.row) | \(.location.column) | \(.code) | \(.message) |"' >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "🎉 Analysis complete!" >> "$GITHUB_STEP_SUMMARY"
           fi
 
