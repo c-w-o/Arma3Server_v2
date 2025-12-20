@@ -92,16 +92,22 @@ jobs:
           print ""
           print "🎉 Analysis complete!"
         }
+
+        echo '<details>' >> "$GITHUB_STEP_SUMMARY"
         ' "$pylint_output_file" >> "$GITHUB_STEP_SUMMARY"
         
         # Append the actual pylint output to the summary
-        echo '<details><summary> Full Pylint Output</summary>' >> "$GITHUB_STEP_SUMMARY"
-        echo '' >> "$GITHUB_STEP_SUMMARY"
-        echo '```' >> "$GITHUB_STEP_SUMMARY"
+
         cat "$pylint_output_file" >> "$GITHUB_STEP_SUMMARY"
+
+        
+
+        # Close the code block and details tag
+
         echo '```' >> "$GITHUB_STEP_SUMMARY"
-        echo '' >> "$GITHUB_STEP_SUMMARY"
+
         echo '</details>' >> "$GITHUB_STEP_SUMMARY"
+
         echo '' >> "$GITHUB_STEP_SUMMARY"
         
         # Check if there are errors and optionally fail
