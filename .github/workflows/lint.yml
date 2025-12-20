@@ -114,6 +114,9 @@ jobs:
         fi
 
   ruff:
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10"]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -128,19 +131,16 @@ jobs:
         run: |
           ruff_output=$(cat ruff_output.json)
           total_issues=0
-          fatal=0
           error=0
           warning=0
-          convention=0
-          refactor=0
           
           echo "## 🔍 Ruff Analysis Results" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           
-          if [ -z "$ruff_output" ]; then
+          if [ -z "$ruff_output" ] || [ "$(echo "$ruff_output" | jq '. | length')" -eq 0 ]; then
             echo "✅ No issues found!" >> "$GITHUB_STEP_SUMMARY"
               else
-            echo "$ruff_output" | jq -r '.[] | "\(.filename): \(.message)"' >> "$GITHUB_STEP_SUMMARY"
+            echo "$ruff_output" | jq -r '.[] | "\(.filename):\(.location.row):\(.location.column): \(.code) \(.message)"' >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
             
             echo '<details><summary>Full Ruff Output</summary>' >> "$GITHUB_STEP_SUMMARY"
@@ -149,13 +149,10 @@ jobs:
             echo '```' >> "$GITHUB_STEP_SUMMARY"
             echo '</details>' >> "$GITHUB_STEP_SUMMARY"
             
-            # Count issues
+            # Count issues by severity (E=Error, W=Warning)
             total_issues=$(echo "$ruff_output" | jq '. | length')
-            fatal=$(echo "$ruff_output" | jq '[.[] | select(.code | startswith("F"))] | length')
             error=$(echo "$ruff_output" | jq '[.[] | select(.code | startswith("E"))] | length')
             warning=$(echo "$ruff_output" | jq '[.[] | select(.code | startswith("W"))] | length')
-            convention=$(echo "$ruff_output" | jq '[.[] | select(.code | startswith("C"))] | length')
-            refactor=$(echo "$ruff_output" | jq '[.[] | select(.code | startswith("R"))] | length')
 
             # Print summary
             echo "### Summary" >> "$GITHUB_STEP_SUMMARY"
@@ -163,11 +160,8 @@ jobs:
             echo "| Category | Count | Description |" >> "$GITHUB_STEP_SUMMARY"
             echo "|----------|-------|-------------|" >> "$GITHUB_STEP_SUMMARY"
             echo "| **Total Issues** | $total_issues | Total Number of Issues |" >> "$GITHUB_STEP_SUMMARY"
-            echo "| **Fatal (F)** | $fatal | Fatal errors preventing analysis |" >> "$GITHUB_STEP_SUMMARY"
-            echo "| **Errors (E)** | $error | Other Errors |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| **Errors (E)** | $error | PEP 8 Errors |" >> "$GITHUB_STEP_SUMMARY"
             echo "| **Warnings (W)** | $warning | Warnings |" >> "$GITHUB_STEP_SUMMARY"
-            echo "| **Conventions (C)** | $convention | Coding Conventions |" >> "$GITHUB_STEP_SUMMARY"
-            echo "| **Refactors (R)** | $refactor | Refactor Suggestions |" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
             echo "🎉 Analysis complete!" >> "$GITHUB_STEP_SUMMARY"
           fi
