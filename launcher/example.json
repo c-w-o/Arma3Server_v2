@@ -1,0 +1,196 @@
+{
+  "config-name": "Antistasi-SOG",
+
+  "defaults": {
+    "maxPlayers": 16,
+    "hostname": "Arma 3 Dedicated Server",
+    "serverPassword": "serverPaAsS",
+    "adminPassword": "admin",
+    "serverCommandPassword": "anoterhPass",
+    "admins": [
+      { "name": "UserA", "steamid": "21784671566580674" },
+      { "name": "UserB", "steamid": "76891789765687901" },
+      { "name": "UserC", "steamid": "25660674035168678" }
+    ],
+    "autoInit": true,
+    "bandwidthAlg": 2,
+    "filePatching": true,
+    "limitFPS": 60,
+    "enableHT": true,
+    "useOCAP": false,
+    "numHeadless": 0,
+    "params": [],
+    "world": "empty",
+    "difficulty": "Custom",
+    "missions": [],
+    "dlcs": {
+        "contact": false,
+        "csla-iron-curtain": false,
+        "global-mobilization": false,
+        "s.o.g-prairie-fire": false,
+        "western-sahara": false,
+        "spearhead-1944": false,
+        "reaction-forces": false,
+        "expeditionary-forces": false
+      },
+    "mods": {
+      "serverMods": [
+        ["Less Explody Aircraft", "2448528581"]
+      ],
+      "baseMods": [
+        ["CBA_A3", "450814997"],
+        ["Zeus Enhanced", "1779063631"],
+        ["ace", "463939057"],
+        ["Enhanced Movement", "333310405"],
+        ["BWMod", "1200127537"],
+        ["Enhanced Movement Rework", "2034363662"],
+        ["Global Mobilization - Demo Vehicle", "1284731930"],
+        ["Hellenic Armed Forces Mod (HAFM) - Helicopters (discontinued)", "909320014"],
+        ["SFP- Bo 105", "1298165770"],
+        ["Advanced Towing", "639837898"],
+        ["BWA3 Add", "1326881314"],
+        ["RHSAFRF", "843425103"],
+        ["RHSUSAF", "843577117"],
+        ["RHSGREF", "843593391"],
+        ["RHSSAF", "843632231"],
+        ["RHSPKL", "1978754337"],
+        ["NIArms All In One (V14 Onwards)", "2595680138"],
+        ["NIArms All in One- ACE Compatibility", "1400566170"],
+        ["NIArms All in One - RHS Compatibility", "1400574293"],
+        ["SPS Weapons V2", "2811886291"],
+        ["SPS Equipment", "1187306764"],
+        ["ACE3 Arsenal Extended - Core", "2522638637"],
+        ["GX - Drones", "3460981677"],
+        ["Gruppe Adler Trenches", "1224892496"],
+        ["NATO Markers+", "1340701737"],
+        ["Hate's Digital Camera", "2577441180"],
+        ["Chemical Warfare PLUS", "3295358796"],
+        ["Weather Plus", "2735613231"],
+        ["Task Force Arrowhead Radio (BETA!!!)", "894678801"],
+        ["cTab 1erGTD", "2262006564"],
+        ["Simple Armbands", "2778578325"],
+        ["WBK Immersive Animations", "3165450999"],
+        ["L3-GPNVG18 Panoramic Night Vision", "313041182"],
+        ["CUP Terrains - Core", "583496184"],
+        ["Šumava", "2947655994"],
+        ["Simplex Support Services [DEV BUILD]", "3029520419"],
+        ["LAMBS_Danger.fsm", "1858075458"],
+        ["Females-TCGM_Girls", "2261045061"]
+      ],
+      "clientMods": [
+        ["DUI - Squad Radar", "1638341685"],
+        ["Zeus Additions", "2387297579"],
+        ["ACE Vehicle Medical", "1911374016"],
+        ["Suppress", "825174634"],
+        ["ACE Interaction Menu Expansion", "1376867375"],
+        ["Realistic Auto Pilots", "1439605692"],
+        ["Larger ACE Nightvision Border", "2290589496"],
+        ["A3 Thermal Improvement", "2041057379"],
+        ["Better Inventory", "2791403093"],
+        ["ArmaFXP", "1105511475"],
+        ["MapTools Remastered", "3032131959"],
+        ["Advance Aero Effects", "2309871702"],
+        ["JSRS SOUNDMOD", "861133494"],
+        ["JSRS SOUNDMOD - RHS USAF Mod Pack Sound Support", "1180533757"],
+        ["JSRS SOUNDMOD - RHS  AFRF Mod Pack Sound Support", "945476727"],
+        ["JSRS SOUNDMOD - RHS GREF Mod Pack Sound Support", "1180534892"],
+        ["JSRS SOUNDMOD - RHS SAF Mod Pack Support", "1486541773"],
+        ["JSRS SOUNDMOD 2025 Beta 2.1", "3407948300"],
+        ["Enhanced Map Ace Version", "2467590475"],
+        ["3den Enhanced", "623475643"],
+        ["SIT 1erGTD", "2262009445"],
+        ["CH View Distance", "837729515"],
+        ["cb_blood", "2362277256"],
+        ["Fawks' Enhanced NVGs", "2513044572"],
+        ["Splendid Lighting Modification", "2070681304"],
+        ["Cinematic Lens Flare", "878502647"],
+        ["Cinematic Lens Flare x Splendid Lighting Compatibility", "2715797525"],
+        ["Real Lighting and Weather", "2809399991"],
+        ["LAxemann's Environment Ducking", "2812569803"],
+        ["Enhanced Soundscape Plus", "2938312887"],
+        ["DynaSound 2", "825181638"],
+        ["Zeus Additions", "2387297579"],
+        ["Crows Zeus Additions", "2447965207"],
+        ["ZEC - Zeus and Eden Templates / Building Compositions", "642912021"],
+        ["ZEI - Zeus and Eden Interiors ( Continued )", "3438718557"],
+        ["JSRS SOUNDMOD 2025 Beta - AiO Compat Files RC2.2", "3407970596"],
+        ["Zeus Framerate Monitor", "3344508108"]
+      ],
+      "maps": [
+        ["CUP Terrains - Maps", "583544987"],
+        ["Rosche, Germany", "1527410521"],
+        ["Ihantala Winter", "1494127420"]
+      ]
+    }
+  },
+
+  "configs": {
+    "Redshirt-Base": {
+      "description": "Redhirts Training Camp",
+      "useOCAP": false,
+      "numHeadless": 2,
+      "hostname": "Redshirt Sam at Home",
+      "mods": {
+        "serverMods": [],
+        "missionMods": [],
+        "clientMods": [],
+        "maps": [],
+        "minus-mods": []
+      },
+      "params": { "extra": "" },
+      "missions": [
+        { "name": "Redshirt%20Basis2.Malden", "autoStart": true }
+      ]
+    },
+
+    "Antistasi-SOG": {
+      "description": "Vietnam / Prairie Fire Setup",
+      "useOCAP": true,
+      "numHeadless": 2,
+      "serverPassword": "Anotherone83",
+      "hostname": "Redshirt Sam in Vietnam",
+      "dlcs": {
+        "contact": false,
+        "csla-iron-curtain": false,
+        "global-mobilization": false,
+        "s.o.g-prairie-fire": true,
+        "western-sahara": false,
+        "spearhead-1944": false,
+        "reaction-forces": false,
+        "expeditionary-forces": false
+      },
+      "mods": {
+        "serverMods": [],
+        "missionMods": [["Antistasi Ultimate - Mod", "3020755032"]],
+        "clientMods": [],
+        "maps": [], 
+        "minus-mods": []
+      },
+      "params": { "extra": "" },
+      "missions": [
+        { "name": "Antistasi_cam_lao_nam.cam_lao_nam", "autoStart": true }
+      ]
+    },
+
+    "Antistasi-Napf": {
+      "description": "Cold War / Napf Setup",
+      "useOCAP": true,
+      "numHeadless": 2,
+      "hostname": "Redshirt Sam in Napf, Sweden",
+      "mods": {
+        "serverMods": [],
+        "missionMods": [
+          ["RHSUSAF", "843577117"],
+          ["Antistasi Ultimate - Mod", "3020755032"]
+        ],
+        "clientMods": [],
+        "maps": [["Napf Island A3", "1425442364"]],
+        "minus-mods": [["Less Explody Aircraft", "2448528581"]]
+      },
+      "params": { "extra": "" },
+      "missions": [
+        { "name": "Antistasi_NapfWinter.NapfWinter", "autoStart": true }
+      ]
+    }
+  }
+}

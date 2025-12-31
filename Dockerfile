@@ -1,4 +1,4 @@
-FROM debian:bullseye-slim
+FROM linuxserver/code-server:latest
 
 LABEL maintainer="CWO - github.com/c-w-o"
 LABEL org.opencontainers.image.source=https://github.com/c-w-o/arma3server_v2
@@ -50,9 +50,28 @@ WORKDIR /tmp
 
 
 
-EXPOSE 2302/udp 2303/udp 2304/udp 2305/udp 2306/udp
+EXPOSE 2302/udp 2303/udp 2304/udp 2305/udp 2306/udp 8443/tcp
 
 
 STOPSIGNAL SIGINT
 COPY launcher /launcher/
-ENTRYPOINT ["python3", "/launcher/launcher.py"]
+
+# Create start.sh directly in Dockerfile
+RUN cat << 'EOF' > /start.sh
+#!/bin/bash
+
+# Start code-server in background
+/code-server/bin/code-server --bind-addr 0.0.0.0:8443 &
+# Optional: start the Arma3 launcher if SKIP_LAUNCHER is not set
+if [ "${SKIP_LAUNCHER}" != "true" ]; then
+    python3 /launcher/launcher.py
+fi
+# Keep container alive
+wait -n
+EOF
+
+RUN chmod +x /start.sh
+
+ENTRYPOINT ["/start.sh"]
+
+# ENTRYPOINT ["python3", "/launcher/launcher.py"]
