@@ -1,0 +1,156 @@
+name: Linting
+
+on:
+  push:
+    branches:
+      - "main"
+      - "**/feature/*"
+  pull_request:
+    branches:
+      - "main"
+    types: [opened, synchronize]
+
+jobs:
+  pylint:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10"]
+    steps:
+    - uses: actions/checkout@v6
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pylint
+    - name: Analysing the code with pylint
+      run: |
+        # Create a temporary file to capture pylint output
+        pylint_output_file="pylint_output.txt"
+        
+        # Run pylint and capture output (both stdout and stderr)
+        pylint $(git ls-files '*.py') > "$pylint_output_file" 2>&1 || true
+        
+        # Show output in console
+        cat "$pylint_output_file"
+        
+        # Use awk to parse and format the entire summary
+        awk -v python_version="${{ matrix.python-version }}" '
+        BEGIN {
+          # Initialize counters
+          score = "N/A"
+          fatal = 0; error = 0; warning = 0; convention = 0; refactor = 0
+          
+          # Print header
+          print "## Pylint Analysis Results (Python " python_version ")"
+          print ""
+        }
+        
+        # Extract score
+        /Your code has been rated at [0-9.]+/ {
+          if (match($0, /rated at ([0-9.]+)/, arr)) {
+            score = arr[1]
+          }
+        }
+        
+        # Process each line to count issues
+        /^[^:]+:[0-9]+:[0-9]+: [A-Z]/ {
+          # Extract the message type (F, E, W, C, R)
+          type = substr($0, index($0, ":") + 1, 1)
+          if (type == "F") {
+            fatal++
+          } else if (type == "E") {
+            error++
+          } else if (type == "W") {
+            warning++
+          } else if (type == "C") {
+            convention++
+          } else if (type == "R") {
+            refactor++
+          }
+        }
+        
+        END {
+          # Calculate totals
+          total_issues = fatal + error + warning + convention + refactor
+          
+          # Print category breakdown
+          print "### Summary"
+          print ""
+          print "| Category | Count | Description |"
+          print "|----------|-------|-------------|"
+          printf "| **Score** | %s/10 | Global Score of the Codebase |\n", score
+          print "| **Total Issues** | " total_issues " | Total Number of Issues |"
+          print "| **Fatal (F)** | " fatal " | Fatal errors preventing analysis |"
+          print "| **Errors (E)** | " error " | Other Errors |"
+          print "| **Warnings (W)** | " warning " | Warnings |"
+          print "| **Conventions (C)** | " convention " | Coding Conventions |"
+          print "| **Refactors (R)** | " refactor " | Refactor Suggestions |"
+          print ""
+          print "🎉 Analysis complete!"
+        }
+        ' "$pylint_output_file" >> "$GITHUB_STEP_SUMMARY"
+        
+        # Append the actual pylint output to the summary
+        echo '<details><summary> Full Pylint Output</summary>' >> "$GITHUB_STEP_SUMMARY"
+        echo '' >> "$GITHUB_STEP_SUMMARY"
+        echo '```' >> "$GITHUB_STEP_SUMMARY"
+        cat "$pylint_output_file" >> "$GITHUB_STEP_SUMMARY"
+        echo '```' >> "$GITHUB_STEP_SUMMARY"
+        echo '' >> "$GITHUB_STEP_SUMMARY"
+        echo '</details>' >> "$GITHUB_STEP_SUMMARY"
+        echo '' >> "$GITHUB_STEP_SUMMARY"
+        
+        # Check if there are errors and optionally fail
+        # Extract error count from the file for conditional exit
+        error_count=$(grep -c -E ':[[:space:]]+[EF][0-9]+:' "$pylint_output_file" 2>/dev/null || echo "0")
+        if [ "$error_count" -gt 0 ]; then
+          echo "::warning::Pylint found $error_count error(s)"
+          # Uncomment below to fail the workflow on errors:
+          # exit 1
+        fi
+
+  ruff:
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10"]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run Ruff
+        uses: astral-sh/ruff-action@v3
+        id: ruff
+        with:
+          version: "latest"
+          args: "check --exit-zero --output-format=json --output-file=ruff_output.json"
+      - name: Parse Ruff Output
+        if: always()
+        run: |
+          ruff_output=$(cat ruff_output.json)
+          python_version="${{ matrix.python-version }}"
+          total_issues=0
+          error=0
+          warning=0
+          
+          echo "## Ruff Analysis Results (Python $python_version)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          
+          if [ -z "$ruff_output" ] || [ "$(echo "$ruff_output" | jq '. | length')" -eq 0 ]; then
+            echo "✅ No issues found!" >> "$GITHUB_STEP_SUMMARY"
+          else            
+            # Print detailed table
+            echo "### Issues" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "| File | Line | Column | Code | Message |" >> "$GITHUB_STEP_SUMMARY"
+            echo "|------|------|--------|------|---------|" >> "$GITHUB_STEP_SUMMARY"
+            echo "$ruff_output" | jq -r '.[] | "| \(.filename) | \(.location.row) | \(.location.column) | \(.code) | \(.message) |"' >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
