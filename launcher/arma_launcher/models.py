@@ -1,6 +1,27 @@
 from __future__ import annotations
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, AliasChoices
+
+
+class ModEntry(BaseModel):
+    name: str
+    id: int
+
+class ModsBlock(BaseModel):
+    serverMods: List[ModEntry] = Field(default_factory=list)
+    baseMods: List[ModEntry] = Field(default_factory=list)
+    clientMods: List[ModEntry] = Field(default_factory=list)
+    maps: List[ModEntry] = Field(default_factory=list)
+
+    extraServer: List[ModEntry] = Field(default_factory=list)
+    extraBase: List[ModEntry] = Field(default_factory=list)
+    extraClient: List[ModEntry] = Field(default_factory=list)
+    extraMaps: List[ModEntry] = Field(default_factory=list)
+
+    minus_mods: List[ModEntry] = Field(
+        default_factory=list,
+        validation_alias="minus-mods"
+    )
 
 class WorkshopItem(BaseModel):
     id: int = Field(..., description="Steam Workshop ID")

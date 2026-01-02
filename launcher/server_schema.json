@@ -52,6 +52,7 @@
         "limitFPS": { "type": "integer", "minimum": 1 },
         "enableHT": { "type": "boolean" },
         "useOCAP": { "type": "boolean" },
+        "port": { "type": "integer", "minimum": 1024, "maximum": 65535 },
         "numHeadless": { "type": "integer", "minimum": 0 },
         "world": { "type": "string" },
         "difficulty": { "type": "string" },
@@ -212,13 +213,19 @@
 
   "$defs": {
     "modEntry": {
-      "type": "array",
-      "prefixItems": [
-        { "type": "string", "minLength": 1 },
-        { "type": ["string", "null"], "pattern": "^[0-9]*$" }
-      ],
-      "minItems": 2,
-      "maxItems": 2
+      "type": "object",
+      "required": ["name", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Human readable mod name (for UI/logging only)"
+        },
+        "id": {
+          "type": "integer",
+          "description": "Steam Workshop ID"
+        }
+      }
     }
   }
 }

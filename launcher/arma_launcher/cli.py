@@ -44,6 +44,7 @@ def main(argv=None) -> int:
             print(json.dumps(plan, indent=2, ensure_ascii=False))
             return 0 if plan.get("ok", True) else 1
 
+        orch.ensure_arma()
         orch.sync_content(dry_run=False)
         orch.generate_server_cfg(dry_run=False)
         if args.no_start:

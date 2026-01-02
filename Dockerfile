@@ -1,4 +1,4 @@
-FROM debian:bullseye-slim
+FROM debian:bookworm-slim
 
 LABEL maintainer="CWO - github.com/c-w-o"
 LABEL org.opencontainers.image.source="https://github.com/c-w-o/arma3server_v2"
@@ -13,6 +13,7 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends --no-install-suggests \
       python3 \
       python3-pip \
+      python3-venv \
       net-tools \
       nano \
       curl \
@@ -22,10 +23,17 @@ RUN apt-get update \
       libcurl4 \
       wget \
       ca-certificates \
-  && pip3 install --no-cache-dir json5 jsonschema \
-  && apt-get autoremove -y \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
+
+RUN python3 -m venv /opt/venv \
+  && /opt/venv/bin/python -m pip install --no-cache-dir --upgrade pip \
+  && /opt/venv/bin/pip install --no-cache-dir \
+      json5 jsonschema \
+      fastapi uvicorn \
+      pydantic pydantic-settings
+
+ENV PATH="/opt/venv/bin:${PATH}"
 
 RUN mkdir -p /steamcmd \
   && cd /steamcmd \
@@ -45,8 +53,7 @@ RUN mkdir -p \
       "${ARMA_ROOT}" \
       "${COMMON_SHARE_ARMA_ROOT}" \
       "${THIS_SHARE_ARMA_ROOT}" \
-      "${TMP_DIR}/steamapps/workshop/content/107410" \
-  && chown -R abc:abc /steamcmd /var/run/share /tmp "${ARMA_ROOT}" || true
+      "${TMP_DIR}/steamapps/workshop/content/107410" 
 
 WORKDIR /tmp
 

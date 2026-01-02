@@ -1,10 +1,45 @@
 from __future__ import annotations
-import json
-from pathlib import Path
-from typing import Any, Dict
-from .models import RootConfig, MergedConfig
-from .logging_setup import get_logger
 
+import json
+from copy import deepcopy
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set
+from jsonschema import validate
+from jsonschema.exceptions import ValidationError
+from .logging_setup import get_logger
+from .models import (
+    MergedConfig,
+    ActiveConfig,
+    DlcSpec,
+    HeadlessClientsConfig,
+    OcapConfig,
+    RuntimeConfig,
+    ServerConfig,
+    SteamConfig,
+    WorkshopConfig,
+    WorkshopItem,
+)
+from .models_file import (
+    FileConfig_Root,
+    FileConfig_Defaults,
+    FileConfig_Override,
+    FileConfig_Mods,
+    FileConfig_Dlcs,
+    FileConfig_ModEntry,
+)
+
+DLC_CATALOG = {
+    "contact": {"name": "Contact", "app_id": 1021790},
+    "csla_iron_curtain": {"name": "CSLA Iron Curtain", "app_id": 1294440, "beta_branch": "creatordlc"},
+    "global_mobilization": {"name": "Global Mobilization", "app_id": 1042220, "beta_branch": "creatordlc"},
+    "sog_prairie_fire": {"name": "S.O.G Prairie Fire", "app_id": 1227700, "beta_branch": "creatordlc"},
+    "western_sahara": {"name": "Western Sahara", "app_id": 1681170, "beta_branch": "creatordlc"},
+    "spearhead_1944": {"name": "Spearhead 1944", "app_id": 1175380, "beta_branch": "creatordlc"},
+    "reaction_forces": {"name": "Reaction Forces", "app_id": 2647760, "beta_branch": "creatordlc"},
+    "expeditionary_forces": {"name": "Expeditionary Forces", "app_id": 2647780, "beta_branch": "creatordlc"},
+}
+
+from .logging_setup import get_logger
 log = get_logger("arma.launcher.config")
 
 def load_json(path: Path) -> Dict[str, Any]:
@@ -15,7 +50,190 @@ def load_json(path: Path) -> Dict[str, Any]:
 
 def load_config(config_path: Path) -> MergedConfig:
     log.info("Loading config: %s", config_path)
-    root = RootConfig.model_validate(load_json(config_path))
-    merged = root.build_active()
-    log.info("Active config: %s", merged.config_name)
+    raw = load_json(config_path)
+    
+    schema_path = Path(__file__).resolve().parents[1] / "server_schema.json"
+    if not schema_path.exists():
+        raise FileNotFoundError(f"server_schema.json not found at {schema_path}")
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    try:
+        validate(instance=raw, schema=schema)
+    except ValidationError as e:
+        log.error("JSON schema validation failed: %s", e.message)
+        raise
+    
+    root = FileConfig_Root.model_validate(raw)
+    
+    if root.config_name not in root.configs:
+        raise ValueError(f"config-name '{root.config_name}' not found in configs keys={list(root.configs.keys())}")
+
+    merged_defaults = merge_defaults_with_override(root.defaults, root.configs[root.config_name])
+    
+    merged = transform_file_config_to_internal(root.config_name, merged_defaults)
+    log.info("Active config (merged): %s", merged.config_name)
     return merged
+
+def _merge_scalar(base, over):
+    return over if over is not None else base
+
+
+def merge_dlcs(base: FileConfig_Dlcs, over: Optional[FileConfig_Dlcs]) -> FileConfig_Dlcs:
+    if over is None:
+        return base
+    b = base.model_dump()
+    o = over.model_dump()
+    b.update(o)  # override wins
+    return FileConfig_Dlcs.model_validate(b)
+
+
+def merge_missions(base: List[Any], over: Optional[List[Any]]) -> List[Any]:
+    if over is None:
+        return list(base or [])
+    return list(base or []) + list(over or [])
+
+
+def _dedupe_and_filter(mods: List[FileConfig_ModEntry], minus_ids: Set[int]) -> List[FileConfig_ModEntry]:
+    out: List[FileConfig_ModEntry] = []
+    seen: Set[int] = set()
+    for m in mods:
+        if m.id in minus_ids:
+            continue
+        if m.id in seen:
+            continue
+        seen.add(m.id)
+        out.append(m)
+    return out
+
+
+def merge_mods(base: FileConfig_Mods, over: Optional[FileConfig_Mods]) -> FileConfig_Mods:
+    if over is None:
+        return base
+
+    minus_ids: Set[int] = {m.id for m in (over.minus_mods or [])}
+
+    merged = FileConfig_Mods(
+        serverMods=_dedupe_and_filter(
+            list(base.serverMods or []) + list(over.serverMods or []) + list(over.extraServer or []),
+            minus_ids,
+        ),
+        baseMods=_dedupe_and_filter(
+            list(base.baseMods or []) + list(over.baseMods or []) + list(over.extraBase or []),
+            minus_ids,
+        ),
+        clientMods=_dedupe_and_filter(
+            list(base.clientMods or []) + list(over.clientMods or []) + list(over.extraClient or []),
+            minus_ids,
+        ),
+        maps=_dedupe_and_filter(
+            list(base.maps or []) + list(over.maps or []) + list(over.extraMaps or []),
+            minus_ids,
+        ),
+        missionMods=_dedupe_and_filter(
+            list(base.missionMods or []) + list(over.missionMods or []) + list(over.extraMission or []),
+            minus_ids,
+        ),
+        
+        extraServer=[],
+        extraBase=[],
+        extraClient=[],
+        extraMaps=[],
+        extraMission=[],
+        minus_mods=[],
+    )
+    return merged
+
+
+def merge_defaults_with_override(defaults: FileConfig_Defaults, over: FileConfig_Override) -> FileConfig_Defaults:
+    merged = defaults.model_copy(deep=True)
+    merged.hostname = _merge_scalar(merged.hostname, over.hostname)
+    merged.serverPassword = _merge_scalar(merged.serverPassword, over.serverPassword)
+    merged.useOCAP = _merge_scalar(merged.useOCAP, over.useOCAP)
+    merged.numHeadless = _merge_scalar(merged.numHeadless, over.numHeadless)
+
+    merged.dlcs = merge_dlcs(merged.dlcs, over.dlcs)
+
+    merged.mods = merge_mods(merged.mods, over.mods)
+
+    merged.missions = merge_missions(merged.missions, over.missions)
+ 
+    extra_args: List[str] = []
+    if isinstance(over.params, list):
+        extra_args = [str(x) for x in over.params]
+    elif isinstance(over.params, dict):
+        extra = over.params.get("extra", "")
+        if isinstance(extra, str) and extra.strip():
+            extra_args = extra.split()
+    merged.params = list(merged.params or []) + extra_args
+    return merged
+
+def _to_items(entries: List[FileConfig_ModEntry]) -> List[WorkshopItem]:
+    return [WorkshopItem(id=int(m.id), name=m.name) for m in entries]
+
+
+def transform_file_config_to_internal(config_name: str, merged: FileConfig_Defaults) -> MergedConfig:
+    # server.cfg basics
+    server = ServerConfig(
+        hostname=merged.hostname,
+        password=merged.serverPassword,
+        password_admin=merged.adminPassword,
+        max_players=merged.maxPlayers,
+        port=merged.port,
+    )
+
+    runtime = RuntimeConfig(
+        cpu_count=4,
+        extra_args=list(merged.params or []),
+    )
+
+    # Workshop mapping: FileConfig_ unterscheidet base/client/mission – runtime braucht:
+    # - mods: alles, was als -mod laufen soll
+    # - servermods: -serverMod
+    # - maps: extra content, wird ebenfalls in -mod gelinkt
+    mods_combined = list(merged.mods.baseMods or []) + list(merged.mods.clientMods or []) + list(merged.mods.missionMods or [])
+    workshop = WorkshopConfig(
+        mods=_to_items(mods_combined),
+        maps=_to_items(merged.mods.maps),
+        servermods=_to_items(merged.mods.serverMods),
+    )
+
+    # DLC boolean-map -> install specs
+    dlcs = []
+    dlc_dump = merged.dlcs.model_dump()
+    for key, enabled in dlc_dump.items():
+        if not enabled:
+            continue
+        spec = DLC_CATALOG.get(key)
+        if not spec:
+            continue
+        dlcs.append(DlcSpec(**spec))
+
+    # OCAP: FileConfig_ useOCAP flag -> V2 ocap config
+    ocap = OcapConfig(
+        enabled=bool(merged.useOCAP),
+        link_to="servermods",
+        link_name="ocap",
+        source_subdir="",
+    )
+
+    # Headless clients
+    hc = HeadlessClientsConfig(
+        enabled=bool(merged.numHeadless and merged.numHeadless > 0),
+        count=int(merged.numHeadless or 0),
+        password=merged.serverPassword,
+        extra_args=[],
+    )
+
+    active = ActiveConfig(
+        steam=SteamConfig(force_validate=False),
+        dlcs=dlcs,
+        workshop=workshop,
+        headless_clients=hc,
+        ocap=ocap,
+    )
+
+    return MergedConfig(
+        config_name=config_name,
+        server=server,
+        runtime=runtime,
+        active=active,
+    )

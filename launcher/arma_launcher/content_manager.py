@@ -172,7 +172,7 @@ class ContentManager:
 
     # ---------------- Workshop items ----------------
     def _workshop_cache_dir(self, workshop_id: int) -> Path:
-        return self.settings.steamcmd_root / "steamapps" / "workshop" / "content" / str(self.settings.arma_workshop_game_id) / str(workshop_id)
+        return ( self.settings.steam_library_root / "steamapps" / "workshop" / "content" / str(self.settings.arma_workshop_game_id) / str(workshop_id) )
 
     def _sync_from_cache(self, cache: Path, dest: Path) -> bool:
         tmp = dest.parent / (dest.name + ".tmp")

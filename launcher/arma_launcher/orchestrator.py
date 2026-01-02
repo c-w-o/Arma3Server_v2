@@ -29,12 +29,22 @@ class Orchestrator:
     def prepare_environment(self) -> None:
         ensure_dirs(self.layout)
         if not self.settings.arma_binary.exists():
-            log.warning("Arma binary not found at %s (container image responsibility).", self.settings.arma_binary)
+            log.warning("Arma binary not found at %s (will be installed/updated via SteamCMD on run).", self.settings.arma_binary)
 
     def ensure_arma(self) -> None:
         if self.settings.skip_install:
             log.info("SKIP_INSTALL: not ensuring Arma dedicated server installation.")
             return
+        steamcmd = SteamCMD(self.settings)
+
+        log.info("Ensuring Arma dedicated server is installed/updated via SteamCMD (app_id=%s) into %s",
+                self.settings.arma_app_id, self.settings.arma_root)
+
+        steamcmd.ensure_app(
+            app_id=self.settings.arma_app_id,
+            install_dir=self.settings.arma_root,
+            validate=True,
+        )
 
     def plan(self) -> Plan:
         steamcmd = SteamCMD(self.settings)
