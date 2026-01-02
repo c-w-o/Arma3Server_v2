@@ -1,0 +1,18 @@
+name: Component Detection
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  dependency-submission:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Component detection
+        uses: advanced-security/component-detection-dependency-submission-action@v0.1.0
