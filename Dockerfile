@@ -1,4 +1,4 @@
-FROM linuxserver/code-server:latest
+FROM debian:bullseye-slim
 
 LABEL maintainer="CWO - github.com/c-w-o"
 LABEL org.opencontainers.image.source="https://github.com/c-w-o/arma3server_v2"
@@ -9,7 +9,6 @@ ENV LC_ALL=C.UTF-8
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# --- System deps + Python deps
 RUN apt-get update \
   && apt-get install -y --no-install-recommends --no-install-suggests \
       python3 \
@@ -28,7 +27,6 @@ RUN apt-get update \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
-# --- steamcmd
 RUN mkdir -p /steamcmd \
   && cd /steamcmd \
   && wget -q https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
@@ -36,13 +34,10 @@ RUN mkdir -p /steamcmd \
   && rm -f steamcmd_linux.tar.gz \
   && chmod +x /steamcmd/steamcmd.sh || true
 
-# --- Paths used by launcher 0.3.0
 ENV ARMA_ROOT=/arma3
 ENV COMMON_SHARE_ARMA_ROOT=/var/run/share/arma3/server-common
 ENV THIS_SHARE_ARMA_ROOT=/var/run/share/arma3/this-server
 ENV TMP_DIR=/tmp
-
-# python imports: launcher.py imports arma_launcher.*
 ENV PYTHONPATH=/launcher
 
 # Workshop cache (code uses TMP_DIR/steamapps/workshop/content/107410)
@@ -55,38 +50,10 @@ RUN mkdir -p \
 
 WORKDIR /tmp
 
-# --- Copy launcher + package + schema
-# We copy the repo root into /launcher, so:
-# /launcher/launcher.py
-# /launcher/arma_launcher/...
-# /launcher/server_schema.json
-COPY . /launcher/
+COPY launcher /launcher/
 
-# (Optional) If you have a requirements.txt you want to use instead:
-# RUN pip3 install --no-cache-dir -r /launcher/requirements.txt
-
-# Ports: Arma + code-server
-EXPOSE 2302/udp 2303/udp 2304/udp 2305/udp 2306/udp 8443/tcp
+EXPOSE 2302/udp 2303/udp 2304/udp 2305/udp 2306/udp
 
 STOPSIGNAL SIGINT
 
-# --- Entrypoint script
-RUN cat << 'EOF' > /start.sh
-#!/bin/bash
-set -euo pipefail
-
-# Start code-server in background
-/code-server/bin/code-server --bind-addr 0.0.0.0:8443 &
-
-# Start launcher unless disabled
-if [ "${SKIP_LAUNCHER:-false}" != "true" ]; then
-  exec python3 /launcher/launcher.py
-fi
-
-# Keep container alive if launcher is skipped
-wait -n
-EOF
-
-RUN chmod +x /start.sh
-
-ENTRYPOINT ["/start.sh"]
+ENTRYPOINT ["python3", "/launcher/launcher.py"]
