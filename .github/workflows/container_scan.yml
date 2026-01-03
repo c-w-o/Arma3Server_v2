@@ -1,0 +1,39 @@
+name: Container vulnerability scan
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: 
+      - "main"
+  schedule:
+      - cron: '0 2 * * *'
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image locally (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          load: true
+          tags: arma3server:ci
+
+      - name: Trivy scan (table output, fail on HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: arma3server:ci
+          format: table
+          exit-code: "1"
+          severity: "CRITICAL,HIGH"
