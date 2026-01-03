@@ -55,7 +55,11 @@ class Orchestrator:
         steamcmd = SteamCMD(self.settings)
         cm = ContentManager(self.settings, self.layout, steamcmd)
         cfg = self.cfg
-
+        
+        p = self.plan()
+        log.info( "Plan: dlcs=%d mods=%d maps=%d servermods=%d hc=%s ocap=%s", len(p.dlcs), len(p.workshop_mods), len(p.workshop_maps), len(p.workshop_servermods), p.headless_count, p.ocap_enabled )
+        log.info( "Plan mods: %s", [m.id for m in p.workshop_mods])
+        
         cm.ensure_dlcs(cfg.active.dlcs, validate=cfg.active.steam.force_validate, dry_run=dry_run)
         cm.ensure_workshop(cfg, dry_run=dry_run)
         cm.link_instance_content(cfg, dry_run=dry_run)
@@ -86,6 +90,11 @@ class Orchestrator:
 
     def start_server(self) -> int:
         cfg = self.cfg
+        
+        p = self.plan()
+        log.info( "Plan: dlcs=%d mods=%d maps=%d servermods=%d hc=%s ocap=%s", len(p.dlcs), len(p.workshop_mods), len(p.workshop_maps), len(p.workshop_servermods), p.headless_count, p.ocap_enabled )
+        log.info( "Plan mods: %s", [m.id for m in p.workshop_mods])
+        
         profiles = self._profiles_dir()
         profiles.mkdir(parents=True, exist_ok=True)
 

@@ -24,10 +24,12 @@ def _main() -> int:
     # If no CLI args are given, allow env-driven mode selection.
     # This is useful for Docker ENTRYPOINT usage.
     if len(sys.argv) == 1:
-        mode = os.environ.get("LAUNCHER_MODE", "run").strip().lower()
+        mode = os.environ.get("LAUNCHER_MODE", "dbg").strip().lower()
         if mode not in ("run", "api", "plan"):
-            mode = "plan"
-        sys.argv = [sys.argv[0], mode]
+            mode = "run"
+            sys.argv = [sys.argv[0], mode, "--dry-run"]
+        else:
+          sys.argv = [sys.argv[0], mode]
 
     # Delegate to the actual launcher CLI inside the package
     from arma_launcher.cli import main as pkg_main

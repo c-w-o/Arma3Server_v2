@@ -1,8 +1,12 @@
 from __future__ import annotations
+import json
 import shutil
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional
 from .models import MergedConfig, WorkshopItem, DlcSpec
 from .settings import Settings
 from .fs_layout import Layout
@@ -38,7 +42,7 @@ class ContentManager:
         # DLCs
         for d in cfg.active.dlcs:
             target = self.layout.dlcs / str(d.app_id)
-            marker = target / ".installed"
+            marker = target / ".modmeta.json"
             will_change = not marker.exists()
             actions.append(PlanAction(
                 action="install_dlc",
@@ -55,7 +59,7 @@ class ContentManager:
             name = item.name or str(wid)
             dest_root = {"mods": self.layout.mods, "maps": self.layout.maps, "servermods": self.layout.mods}.get(kind, self.layout.mods)
             dest = dest_root / str(wid)
-            marker = dest / ".installed"
+            marker = dest / ".modmeta.json"
             cache = self._workshop_cache_dir(wid)
             if not cache.exists():
                 sev = "warn" if item.required else "info"
@@ -148,7 +152,7 @@ class ContentManager:
         for d in dlcs:
             target = self.layout.dlcs / str(d.app_id)
             target.mkdir(parents=True, exist_ok=True)
-            marker = target / ".installed"
+            marker = target / ".modmeta.json"
             before = marker.exists()
 
             if dry_run:
@@ -158,14 +162,8 @@ class ContentManager:
             if self.settings.skip_install:
                 log.info("SKIP_INSTALL: not installing DLC %s (%s)", d.name, d.app_id)
             else:
-                self.steamcmd.ensure_app(
-                    d.app_id,
-                    install_dir=target,
-                    validate=validate,
-                    beta_branch=d.beta_branch,
-                    beta_password=d.beta_password,
-                )
-                marker.write_text("ok", encoding="utf-8")
+                self.steamcmd.ensure_app( d.app_id, install_dir=target, validate=validate, beta_branch=d.beta_branch, beta_password=d.beta_password )
+                self._write_modmeta(marker, steamid=str(d.app_id), name=d.name, timestamp=self._now_epoch())
 
             results.append(InstallResult("dlc", str(d.app_id), target, changed=not before))
         return results
@@ -183,6 +181,95 @@ class ContentManager:
             shutil.rmtree(dest)
         tmp.rename(dest)
         return True
+    
+    @staticmethod
+    def _now_iso_z() -> str:
+        return datetime.now(timezone.utc).strftime(ContentManager._ISO_Z)
+
+    @staticmethod
+    def _now_epoch() -> int:
+        return int(datetime.now(timezone.utc).timestamp())
+
+    def _read_modmeta(self, path: Path) -> Optional[dict]:
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+
+    def _write_modmeta(
+        self,
+        path: Path,
+        *,
+        steamid: str,
+        name: str,
+        timestamp: int,
+        synced_at: Optional[str] = None,
+        last_checked: Optional[str] = None,
+    ) -> None:
+        data = {
+            "steamid": str(steamid),
+            "name": str(name),
+            "timestamp": int(timestamp),
+            "synced_at": synced_at or self._now_iso_z(),
+            "last_checked": last_checked or self._now_iso_z(),
+        }
+        path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    def _get_remote_time_updated_epoch(self, workshop_id: int) -> Optional[int]:
+        """Steam Web API: GetPublishedFileDetails -> time_updated (epoch seconds, UTC)."""
+        url = "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/"
+        post_data = urllib.parse.urlencode(
+            {
+                "itemcount": "1",
+                "publishedfileids[0]": str(workshop_id),
+            }
+        ).encode("utf-8")
+
+        req = urllib.request.Request(url, data=post_data, headers={"User-Agent": "Mozilla/5.0"})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                body = resp.read().decode("utf-8")
+            j = json.loads(body)
+            details = j.get("response", {}).get("publishedfiledetails", [])
+            if not details:
+                return None
+            time_updated = details[0].get("time_updated")
+            if not time_updated:
+                return None
+            return int(time_updated)
+        except Exception as e:
+            log.debug("GetPublishedFileDetails failed for %s: %s", workshop_id, e)
+            return None
+
+    def _is_workshop_item_up_to_date(self, wid: int, dest: Path, marker: Path, name: str) -> tuple[bool, Optional[int]]:
+        """Return (up_to_date, remote_ts). Updates marker.last_checked when possible."""
+        if not dest.exists() or not marker.exists():
+            return (False, None)
+
+        meta = self._read_modmeta(marker) or {}
+        local_ts = int(meta.get("timestamp") or 0)
+
+        checked = self._now_iso_z()
+        remote_ts = self._get_remote_time_updated_epoch(wid)
+
+        # Always update last_checked if we can read the marker.
+        try:
+            if meta:
+                meta["steamid"] = str(wid)
+                meta["name"] = name
+                meta["timestamp"] = local_ts
+                meta["synced_at"] = str(meta.get("synced_at") or checked)
+                meta["last_checked"] = checked
+                marker.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        except Exception:
+            pass
+
+        # If remote can't be determined, treat as not up-to-date (old launcher behavior).
+        if remote_ts is None:
+            return (False, None)
+
+        return (local_ts >= int(remote_ts), int(remote_ts))
+
 
     def ensure_workshop_item(self, kind: str, item: WorkshopItem, *, validate: bool, dry_run: bool = False) -> Optional[InstallResult]:
         wid = int(item.id)
@@ -190,7 +277,7 @@ class ContentManager:
 
         dest_root = {"mods": self.layout.mods, "maps": self.layout.maps, "servermods": self.layout.mods}.get(kind, self.layout.mods)
         dest = dest_root / str(wid)
-        marker = dest / ".installed"
+        marker = dest / ".modmeta.json"
         before = marker.exists()
 
         if dry_run:
@@ -199,6 +286,10 @@ class ContentManager:
         if self.settings.skip_install:
             log.info("SKIP_INSTALL: not downloading workshop %s (%s) kind=%s", name, wid, kind)
             return InstallResult(kind, str(wid), dest, changed=not before)
+        
+        if up_to_date:
+            log.info("Workshop mod up-to-date: %s (%s) kind=%s", name, wid, kind)
+            return InstallResult(kind, str(wid), dest, changed=False)
 
         self.steamcmd.workshop_download(self.settings.arma_workshop_game_id, wid, validate=validate)
         cache = self._workshop_cache_dir(wid)
@@ -209,19 +300,24 @@ class ContentManager:
             return None
 
         changed = self._sync_from_cache(cache, dest)
-        marker.write_text("ok", encoding="utf-8")
+        if remote_ts is None:
+            remote_ts = self._get_remote_time_updated_epoch(wid) or self._now_epoch()
+        self._write_modmeta(marker, steamid=str(wid), name=name, timestamp=int(remote_ts))
         return InstallResult(kind, str(wid), dest, changed=(changed or not before))
 
     def ensure_workshop(self, cfg: MergedConfig, *, dry_run: bool = False) -> List[InstallResult]:
         validate = bool(cfg.active.steam.force_validate)
         results: List[InstallResult] = []
         for item in cfg.active.workshop.mods:
+            log.info("Workshop: %s '%s' (id=%s) -> category=%s validate=%s dry_run=%s", "ensure", item.name or "<unnamed>", item.id, "mods", validate, dry_run )
             r = self.ensure_workshop_item("mods", item, validate=validate, dry_run=dry_run)
             if r: results.append(r)
         for item in cfg.active.workshop.maps:
+            log.info("Workshop: %s '%s' (id=%s) -> category=%s validate=%s dry_run=%s", "ensure", item.name or "<unnamed>", item.id, "maps", validate, dry_run )
             r = self.ensure_workshop_item("maps", item, validate=validate, dry_run=dry_run)
             if r: results.append(r)
         for item in cfg.active.workshop.servermods:
+            log.info("Workshop: %s '%s' (id=%s) -> category=%s validate=%s dry_run=%s", "ensure", item.name or "<unnamed>", item.id, "servermods", validate, dry_run )
             r = self.ensure_workshop_item("servermods", item, validate=validate, dry_run=dry_run)
             if r: results.append(r)
         return results
