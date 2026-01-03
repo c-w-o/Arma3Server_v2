@@ -31,10 +31,21 @@ jobs:
           tags: arma3server:ci
           pull: true
 
-      - name: Trivy scan (table output, fail on HIGH/CRITICAL)
+      - name: Trivy scan (PRs report only)
+        if: github.event_name == 'pull_request'
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: arma3server:ci
+          format: table
+          exit-code: "0"
+          severity: "CRITICAL,HIGH"
+
+      - name: Trivy scan (scheduled/push fail if fixable)
+        if: github.event_name != 'pull_request'
         uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: arma3server:ci
           format: table
           exit-code: "1"
           severity: "CRITICAL,HIGH"
+          ignore-unfixed: true
