@@ -14,10 +14,7 @@ RUN apt-get update \
       python3 \
       python3-pip \
       python3-venv \
-      net-tools \
-      nano \
       curl \
-      iputils-ping \
       lib32stdc++6 \
       lib32gcc-s1 \
       libcurl4 \
@@ -27,12 +24,13 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 RUN python3 -m venv /opt/venv \
-  && /opt/venv/bin/python -m pip install --no-cache-dir --upgrade pip \
+  && /opt/venv/bin/python -m pip install --no-cache-dir --upgrade \
+      pip setuptools wheel \
   && /opt/venv/bin/pip install --no-cache-dir \
       json5 jsonschema \
       fastapi uvicorn \
       pydantic pydantic-settings
-
+      
 ENV PATH="/opt/venv/bin:${PATH}"
 
 RUN mkdir -p /steamcmd \
