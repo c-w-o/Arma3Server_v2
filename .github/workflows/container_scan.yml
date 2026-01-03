@@ -29,6 +29,7 @@ jobs:
           file: ./Dockerfile
           load: true
           tags: arma3server:ci
+          pull: true
 
       - name: Trivy scan (table output, fail on HIGH/CRITICAL)
         uses: aquasecurity/trivy-action@0.28.0
