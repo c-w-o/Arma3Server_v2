@@ -52,9 +52,21 @@ class ServerConfig(BaseModel):
     profiles_subdir: str = "profiles"
     missions_dir: str = "mpmissions"
     battleye: bool = True
-    verify_signatures: int = 2
+    verify_signatures: int = 0
     motd: List[str] = Field(default_factory=list)
     motd_interval: int = 5
+    kick_duplicate: bool = True
+    equal_mod_required: bool = False
+    allowed_file_patching: int = 1  # 0=block, 1=HC only, 2=all
+
+    # Headless client allowlists in server.cfg
+    headless_clients: List[str] = Field(default_factory=lambda: ["127.0.0.1"])
+    local_clients: List[str] = Field(default_factory=lambda: ["127.0.0.1"])
+
+    # Logging / RPT
+    time_stamp_format: str = "short"     # "none" | "short" | "full"
+    log_file: str = "server_console.log" # Arma's own console log file name
+    persistent: bool = True
 
 class RuntimeConfig(BaseModel):
     cpu_count: int = 4

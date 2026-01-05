@@ -18,6 +18,8 @@ RUN apt-get update \
       lib32stdc++6 \
       lib32gcc-s1 \
       libcurl4 \
+      iputils-ping \
+      net-tools \
       wget \
       ca-certificates \
   && apt-get clean \

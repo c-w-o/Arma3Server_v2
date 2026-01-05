@@ -532,6 +532,22 @@ class ContentManager:
         link_path.symlink_to(target, target_is_directory=True)
 
     def link_instance_content(self, cfg: MergedConfig, *, dry_run: bool = False) -> None:
+        
+        log.info(
+            "Layout: inst=%s inst_mods=%s inst_mpmissions=%s inst_servermods=%s inst_config=%s",
+            self.settings.arma_instance,
+            self.layout.inst_mods,
+            self.layout.inst_mpmissions,
+            self.layout.inst_servermods,
+            self.layout.inst_config,
+        )
+        if self.layout.inst_mods.resolve() == self.layout.inst_mpmissions.resolve():
+            raise RuntimeError(
+                f"Layout invalid: inst_mods and inst_mpmissions resolve to the same path: "
+                f"{self.layout.inst_mods} == {self.layout.inst_mpmissions}. "
+                f"This would link workshop mods into mpmissions."
+            )
+
         if not dry_run:
             for d in [self.layout.inst_mods, self.layout.inst_servermods]:
                 d.mkdir(parents=True, exist_ok=True)
@@ -540,21 +556,36 @@ class ContentManager:
                         child.unlink(missing_ok=True)
                     elif child.is_dir():
                         shutil.rmtree(child)
+        
+        def link_into_game_root(link_name: str, target: Path) -> None:
+            # Create /arma3 if needed (normally exists)
+            if not dry_run:
+                try:
+                    self.settings.arma_root.mkdir(parents=True, exist_ok=True)
+                except Exception:
+                    pass
+            self._recreate_link(self.settings.arma_root / link_name, target, dry_run=dry_run)
+
+        def wid_link_name(wid: str | int) -> str:
+            return f"@{wid}"
 
         for it in cfg.active.workshop.mods:
             src = self.layout.mods / str(it.id)
             if src.exists():
                 self._recreate_link(self.layout.inst_mods / str(it.id), src, dry_run=dry_run)
+                link_into_game_root(wid_link_name(it.id), src)
 
         for it in cfg.active.workshop.maps:
             src = self.layout.maps / str(it.id)
             if src.exists():
                 self._recreate_link(self.layout.inst_mods / str(it.id), src, dry_run=dry_run)
+                link_into_game_root(wid_link_name(it.id), src)
 
         for it in cfg.active.workshop.servermods:
             src = self.layout.mods / str(it.id)
             if src.exists():
                 self._recreate_link(self.layout.inst_servermods / str(it.id), src, dry_run=dry_run)
+                link_into_game_root(wid_link_name(it.id), src)
 
         # OCAP custom build
         oc = cfg.active.ocap
@@ -562,5 +593,36 @@ class ContentManager:
             src = self.layout.ocap if not oc.source_subdir else (self.layout.ocap / oc.source_subdir)
             dst_base = self.layout.inst_mods if oc.link_to == "mods" else self.layout.inst_servermods
             self._recreate_link(dst_base / oc.link_name, src, dry_run=dry_run)
+            oc_link = oc.link_name if oc.link_name.startswith("@") else f"@{oc.link_name}"
+            link_into_game_root(oc_link, src)
+
+        # --- Missions: make /arma3/mpmissions point to instance missions folder
+        missions_src = self.layout.inst_mpmissions
+        missions_dst = self.settings.arma_root / cfg.server.missions_dir  # usually "mpmissions"
+        if not dry_run:
+            missions_src.mkdir(parents=True, exist_ok=True)
+        self._recreate_link(missions_dst, missions_src, dry_run=dry_run)
+
+        # --- Config: keep instance config authoritative, but expose generated cfgs under /arma3/config as symlinks
+        # Do NOT replace /arma3/config directory (game files may live there). Only link the generated files.
+        inst_cfg = self.layout.inst_config
+        if not dry_run:
+            inst_cfg.mkdir(parents=True, exist_ok=True)
+            self.layout.arma_cfg_dir.mkdir(parents=True, exist_ok=True)
+
+        # Link generated server cfg
+        self._recreate_link(
+            self.layout.arma_cfg_dir / "generated_a3server.cfg",
+            inst_cfg / "generated_a3server.cfg",
+            dry_run=dry_run,
+        )
+
+        # Link generated HC cfg (if you generate it)
+        self._recreate_link(
+            self.layout.arma_cfg_dir / "generated_hc_a3client.cfg",
+            inst_cfg / "generated_hc_a3client.cfg",
+            dry_run=dry_run,
+        )
 
         log.info("Instance symlinks prepared%s.", " (dry-run)" if dry_run else "")
+

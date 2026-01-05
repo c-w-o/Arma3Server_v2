@@ -1,12 +1,14 @@
 from __future__ import annotations
 from pathlib import Path
+from typing import List
+import os
 from .settings import Settings
 from .logging_setup import get_logger
 from .fs_layout import build_layout, ensure_dirs
 from .config_loader import load_config
 from .steamcmd import SteamCMD
 from .content_manager import ContentManager
-from .cfg_generator import generate_server_cfg
+from .cfg_generator import generate_server_cfg, generate_profile_cfg
 from .process_runner import ProcessRunner
 from .planner import Plan
 
@@ -80,22 +82,111 @@ class Orchestrator:
         generate_server_cfg(self.cfg, out)
         return out
 
+    def _server_cfg_path(self) -> Path:
+        return self.layout.inst_config / "generated_a3server.cfg"
+
+    def _hc_cfg_path(self) -> Path:
+        return self.layout.inst_config / "generated_hc_a3client.cfg"
+
+
     def _build_mod_arg(self) -> str:
         parts = []
         for p in sorted(self.layout.inst_mods.iterdir()):
             if p.is_symlink() or p.is_dir():
                 parts.append(str(p))
         return ";".join(parts)
+    
+    def _prefer_game_root_token(self, token: str) -> str:
+        """
+        If /arma3/<token> exists, we can pass token (e.g. "@333...") like the old launcher.
+        Otherwise fall back to absolute instance path to avoid breaking startup.
+        """
+        p = self.settings.arma_root / token
+        if p.exists():
+            return token
+        # fallback: translate "@123" -> "<inst_mods>/123"
+        if token.startswith("@"):
+            fallback = self.layout.inst_mods / token[1:]
+            if fallback.exists() or fallback.is_symlink():
+                return str(fallback)
+        return token
 
-    def _build_servermod_arg(self) -> str:
-        parts = []
-        for p in sorted(self.layout.inst_servermods.iterdir()):
-            if p.is_symlink() or p.is_dir():
-                parts.append(str(p))
-        return ";".join(parts)
+    def _build_mod_arg(self, cfg) -> str:
+        """
+        Old-style: -mod=@id;@id;...
+        Order is taken from config lists (mods first, then maps), optional OCAP if linked to mods.
+        """
+        parts: List[str] = []
+
+        # regular workshop mods
+        for it in cfg.active.workshop.mods:
+            tok = self._mod_token(it.id)
+            parts.append(self._prefer_game_root_token(tok))
+
+        # maps are also loaded via -mod
+        for it in cfg.active.workshop.maps:
+            tok = self._mod_token(it.id)
+            parts.append(self._prefer_game_root_token(tok))
+
+        # OCAP (if user chose link_to == "mods")
+        oc = cfg.active.ocap
+        if oc.enabled and oc.link_to == "mods":
+            tok = self._mod_token(oc.link_name)
+            parts.append(self._prefer_game_root_token(tok))
+
+        # de-dup, keep order
+        seen = set()
+        ordered = []
+        for p in parts:
+            if p and p not in seen:
+                seen.add(p)
+                ordered.append(p)
+        return ";".join(ordered)
+
+    def _mod_token(self, name: str) -> str:
+        """
+        Normalize a mod token for -mod/-serverMod:
+          "123"  -> "@123"
+          "@123" -> "@123"
+        """
+        s = str(name).strip()
+        if not s:
+            return s
+        return s if s.startswith("@") else f"@{s}"
+    
+    def _build_servermod_arg(self, cfg) -> str:
+        """
+        Old-style: -serverMod=@id;@id;...
+        Order from config list, optional OCAP if linked to servermods.
+        """
+        parts: List[str] = []
+
+        for it in cfg.active.workshop.servermods:
+            tok = self._mod_token(it.id)
+            # servermods were mirrored to game-root too; if not, fall back to instance servermods path
+            p = self.settings.arma_root / tok
+            if p.exists():
+                parts.append(tok)
+            else:
+                fallback = self.layout.inst_servermods / str(it.id)
+                parts.append(str(fallback) if (fallback.exists() or fallback.is_symlink()) else tok)
+
+        oc = cfg.active.ocap
+        if oc.enabled and oc.link_to == "servermods":
+            tok = self._mod_token(oc.link_name)
+            parts.append(self._prefer_game_root_token(tok))
+
+        # de-dup, keep order
+        seen = set()
+        ordered = []
+        for p in parts:
+            if p and p not in seen:
+                seen.add(p)
+                ordered.append(p)
+        return ";".join(ordered)
 
     def _profiles_dir(self) -> Path:
-        return self.settings.arma_instance / self.cfg.server.profiles_subdir
+        return self.layout.inst_config / "profiles"
 
     def start_server(self) -> int:
         cfg = self.cfg
@@ -113,19 +204,22 @@ class Orchestrator:
         )
         log.info("Plan mods: %s", [f"{m.name or 'UNKNOWN'} ({m.id})" for m in cfg.active.workshop.mods])
         
+        self.layout.inst_config.mkdir(parents=True, exist_ok=True)
+        generate_server_cfg(cfg, self._server_cfg_path())
+
         profiles = self._profiles_dir()
         profiles.mkdir(parents=True, exist_ok=True)
-
+        generate_profile_cfg(cfg, profiles, cfg.config_name)
         server_log = self.layout.inst_logs / "server.log"
 
         cmd = [
             str(self.settings.arma_binary),
             f"-port={cfg.server.port}",
-            f"-config={self.settings.arma_root / 'config' / 'generated_a3server.cfg'}",
+            f"-config={self._server_cfg_path()}",
             f"-profiles={profiles}",
             f"-name={cfg.config_name}",
-            f"-mod={self._build_mod_arg()}",
-            f"-serverMod={self._build_servermod_arg()}",
+            f"-mod={self._build_mod_arg(cfg)}",
+            f"-serverMod={self._build_servermod_arg(cfg)}",
         ] + cfg.runtime.extra_args
 
         self.runner.start("server", cmd, cwd=self.settings.arma_root, log_file=server_log)
@@ -142,7 +236,7 @@ class Orchestrator:
                     f"-password={hc_cfg.password}",
                     f"-profiles={profiles / f'hc-{i}'}",
                     f"-name=hc-{i}",
-                    f"-mod={self._build_mod_arg()}",
+                    f"-mod={self._build_mod_arg(cfg)}",
                 ] + hc_cfg.extra_args
                 self.runner.start(f"hc-{i}", hc_cmd, cwd=self.settings.arma_root, log_file=hc_log)
 
