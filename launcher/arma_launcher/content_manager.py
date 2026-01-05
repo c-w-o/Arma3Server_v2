@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import os
 import shutil
 import urllib.parse
 import urllib.request
@@ -10,7 +11,7 @@ from typing import List, Optional
 from .models import MergedConfig, WorkshopItem, DlcSpec
 from .settings import Settings
 from .fs_layout import Layout
-from .steamcmd import SteamCMD
+from .steamcmd import SteamCMD, SteamCmdError
 from .logging_setup import get_logger
 from .planner import Plan, PlanAction
 
@@ -28,6 +29,7 @@ class ContentManager:
         self.settings = settings
         self.layout = layout
         self.steamcmd = steamcmd
+        self.normalize_exts = [".pbo", ".paa", ".sqf"]
 
     # ---------------- Planning ----------------
     def plan(self, cfg: MergedConfig) -> Plan:
@@ -41,7 +43,7 @@ class ContentManager:
 
         # DLCs
         for d in cfg.active.dlcs:
-            target = self.layout.dlcs / str(d.app_id)
+            target = self.layout.dlcs / str(d.mount_name)
             marker = target / ".modmeta.json"
             will_change = not marker.exists()
             actions.append(PlanAction(
@@ -151,9 +153,10 @@ class ContentManager:
         results: List[InstallResult] = []
         for d in dlcs:
             target = self.layout.dlcs / str(d.app_id)
-            target.mkdir(parents=True, exist_ok=True)
+            target = self.layout.dlcs / str(d.mount_name)
             marker = target / ".modmeta.json"
             before = marker.exists()
+            link_dst = self.settings.arma_root / str(d.mount_name)
 
             if dry_run:
                 results.append(InstallResult("dlc", str(d.app_id), target, changed=not before))
@@ -164,11 +167,14 @@ class ContentManager:
             else:
                 self.steamcmd.ensure_app( d.app_id, install_dir=target, validate=validate, beta_branch=d.beta_branch, beta_password=d.beta_password )
                 self._write_modmeta(marker, steamid=str(d.app_id), name=d.name, timestamp=self._now_epoch())
+                self._recreate_link(link_dst, target, dry_run=False)
 
             results.append(InstallResult("dlc", str(d.app_id), target, changed=not before))
         return results
 
     # ---------------- Workshop items ----------------
+    _ISO_Z = "%Y-%m-%dT%H:%M:%SZ"
+    
     def _workshop_cache_dir(self, workshop_id: int) -> Path:
         return ( self.settings.steam_library_root / "steamapps" / "workshop" / "content" / str(self.settings.arma_workshop_game_id) / str(workshop_id) )
 
@@ -182,6 +188,86 @@ class ContentManager:
         tmp.rename(dest)
         return True
     
+    def _copy_keys_from_mod(self, moddir: Path, *, dispname: str, steamid: str) -> None:
+        """
+        Old launcher behavior:
+        - find *.bikey (case-insensitive)
+        - copy into /arma3/keys as "<steamid>_<originalname>"
+        - remove old keys for same steamid prefix first (avoid buildup/stale keys)
+        """
+        keys_dir = self.layout.arma_keys_dir
+        try:
+            keys_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            log.error("Failed to ensure keys dir %s: %s", keys_dir, e)
+            return
+
+        # cleanup old keys for this mod (prefix)
+        prefix = f"{steamid}_"
+        try:
+            for f in keys_dir.glob(f"{prefix}*.bikey"):
+                f.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+        found: list[Path] = []
+        for root, _, files in os.walk(moddir):
+            for fn in files:
+                if Path(fn).suffix.lower() == ".bikey":
+                    found.append(Path(root) / fn)
+
+        if not found:
+            log.warning("No keys found for mod %s (%s)", dispname, steamid)
+            return
+
+        for key_file in found:
+            try:
+                target = keys_dir / f"{steamid}_{key_file.name}"
+                shutil.copy2(str(key_file), str(target))
+            except Exception as e:
+                log.error("Failed to copy key %s: %s", key_file, e)
+    
+    def _safe_rename(self, src: Path, dst: Path) -> None:
+        try:
+            src.rename(dst)
+        except Exception as e:
+            log.error("Failed to rename %s -> %s: %s", src, dst, e)
+
+    def _normalize_mod_case(self, mod_path: Path) -> None:
+        """
+        Old launcher behavior:
+          - walk bottom-up
+          - directories -> lower-case
+          - files with selected extensions -> lower-case file name
+          - avoid collisions
+        """
+        lower_exts = {e.lower() for e in self.normalize_exts}
+
+        for root, dirs, files in os.walk(mod_path, topdown=False):
+            root_path = Path(root)
+
+            # files
+            for fname in files:
+                fpath = root_path / fname
+                suffix = fpath.suffix.lower()
+                if suffix in lower_exts:
+                    new_path = fpath.with_name(fpath.name.lower())
+                    if fpath != new_path:
+                        if new_path.exists() and new_path.resolve() != fpath.resolve():
+                            log.error("Normalization collision: %s -> %s (target exists)", fpath, new_path)
+                            continue
+                        self._safe_rename(fpath, new_path)
+
+            # directories
+            for dname in dirs:
+                dpath = root_path / dname
+                new_dpath = dpath.with_name(dname.lower())
+                if dpath != new_dpath:
+                    if new_dpath.exists() and new_dpath.resolve() != dpath.resolve():
+                        log.error("Normalization collision: %s -> %s (target exists)", dpath, new_dpath)
+                        continue
+                    self._safe_rename(dpath, new_dpath)
+
     @staticmethod
     def _now_iso_z() -> str:
         return datetime.now(timezone.utc).strftime(ContentManager._ISO_Z)
@@ -267,6 +353,9 @@ class ContentManager:
         # If remote can't be determined, treat as not up-to-date (old launcher behavior).
         if remote_ts is None:
             return (False, None)
+        
+        if not self._verify_mod_minimum(dest, name):
+            return (False, None)
 
         return (local_ts >= int(remote_ts), int(remote_ts))
 
@@ -287,39 +376,148 @@ class ContentManager:
             log.info("SKIP_INSTALL: not downloading workshop %s (%s) kind=%s", name, wid, kind)
             return InstallResult(kind, str(wid), dest, changed=not before)
         
+        up_to_date, remote_ts = self._is_workshop_item_up_to_date(wid, dest, marker, name)
+        
         if up_to_date:
             log.info("Workshop mod up-to-date: %s (%s) kind=%s", name, wid, kind)
             return InstallResult(kind, str(wid), dest, changed=False)
 
-        self.steamcmd.workshop_download(self.settings.arma_workshop_game_id, wid, validate=validate)
+        log.warning("Workshop mod not up-to-date: %s (%s) kind=%s - start downloading", name, wid, kind)
+        try:
+            self.steamcmd.workshop_download(self.settings.arma_workshop_game_id, wid, validate=validate)
+        except SteamCmdError as e:
+            # If the workshop item no longer exists / is private / access denied:
+            # - required -> hard fail with a helpful message
+            # - optional -> warn + skip
+            if e.kind in ("NOT_FOUND", "ACCESS_DENIED"):
+                msg = f"Workshop item unavailable: {name} ({wid}) kind={kind} reason={e.kind}"
+                if item.required:
+                    raise RuntimeError(msg) from e
+                log.warning("%s - skipping optional item", msg)
+                return None
+            raise
+
         cache = self._workshop_cache_dir(wid)
         if not cache.exists():
+            msg = ( f"Workshop download produced no cache directory: {cache} (item={name} id={wid} kind={kind}). Item may be removed/private, or download failed silently.")
             if item.required:
-                raise RuntimeError(f"Workshop download failed; cache missing: {cache}")
-            log.warning("Workshop cache missing for optional item %s (%s)", name, wid)
+                raise RuntimeError(msg)
+            log.warning("%s - skipping optional item", msg)
             return None
 
         changed = self._sync_from_cache(cache, dest)
+        self._normalize_mod_case(dest)
         if remote_ts is None:
             remote_ts = self._get_remote_time_updated_epoch(wid) or self._now_epoch()
         self._write_modmeta(marker, steamid=str(wid), name=name, timestamp=int(remote_ts))
+        self._copy_keys_from_mod(dest, dispname=name, steamid=str(wid))
         return InstallResult(kind, str(wid), dest, changed=(changed or not before))
+
+    def _verify_mod_minimum(self, src_path: Path, name: str, required: Optional[list[str]] = None) -> bool:
+        """
+        Old launcher behavior:
+          default required: ["addons", "meta.cpp", ".pbo"]
+          - "addons" satisfied if addons/ exists OR any *.pbo exists
+          - "meta.cpp" satisfied case-insensitive anywhere under mod
+        """
+        if required is None:
+            required = ["addons", "meta.cpp", ".pbo"]
+
+        src = Path(src_path)
+        if not src.exists():
+            return False
+
+        missing: list[str] = []
+
+        if "addons" in required:
+            if (src / "addons").exists():
+                pass
+            elif any(src.glob("**/*.pbo")):
+                pass
+            else:
+                missing.append("addons or .pbo")
+
+        if "meta.cpp" in required:
+            if not (src / "meta.cpp").exists():
+                found_meta = any(p.name.lower() == "meta.cpp" for p in src.rglob("*") if p.is_file())
+                if not found_meta:
+                    missing.append("meta.cpp")
+
+        # optional additional requirements
+        for req in required:
+            if req in ("addons", "meta.cpp", ".pbo"):
+                continue
+            if req.endswith("/"):
+                if not (src / req.rstrip("/")).exists():
+                    missing.append(req)
+            else:
+                if not (src / req).exists():
+                    missing.append(req)
+
+        if missing:
+            log.debug("Validation failed for %s (%s). Missing: %s", name, src_path, missing)
+            return False
+        return True
 
     def ensure_workshop(self, cfg: MergedConfig, *, dry_run: bool = False) -> List[InstallResult]:
         validate = bool(cfg.active.steam.force_validate)
         results: List[InstallResult] = []
+        failures: list[tuple[str, str, int, str]] = []  # (kind, name, wid, reason)
+        
         for item in cfg.active.workshop.mods:
-            log.info("Workshop: %s '%s' (id=%s) -> category=%s validate=%s dry_run=%s", "ensure", item.name or "<unnamed>", item.id, "mods", validate, dry_run )
-            r = self.ensure_workshop_item("mods", item, validate=validate, dry_run=dry_run)
-            if r: results.append(r)
+            try:
+                r = self.ensure_workshop_item("mods", item, validate=validate, dry_run=dry_run)
+                if r:
+                    results.append(r)
+            except Exception as e:
+                wid = int(item.id)
+                name = item.name or str(wid)
+                reason = str(e)
+                if item.required:
+                    log.error("Workshop REQUIRED item failed: %s (%s) kind=mods :: %s", name, wid, reason)
+                    failures.append(("mods", name, wid, reason))
+                else:
+                    log.warning("Workshop OPTIONAL item failed: %s (%s) kind=mods :: %s", name, wid, reason)
+                continue
         for item in cfg.active.workshop.maps:
             log.info("Workshop: %s '%s' (id=%s) -> category=%s validate=%s dry_run=%s", "ensure", item.name or "<unnamed>", item.id, "maps", validate, dry_run )
-            r = self.ensure_workshop_item("maps", item, validate=validate, dry_run=dry_run)
-            if r: results.append(r)
+            try:
+                r = self.ensure_workshop_item("maps", item, validate=validate, dry_run=dry_run)
+                if r:
+                    results.append(r)
+            except Exception as e:
+                wid = int(item.id)
+                name = item.name or str(wid)
+                reason = str(e)
+                if item.required:
+                    log.error("Workshop REQUIRED item failed: %s (%s) kind=maps :: %s", name, wid, reason)
+                    failures.append(("maps", name, wid, reason))
+                else:
+                    log.warning("Workshop OPTIONAL item failed: %s (%s) kind=maps :: %s", name, wid, reason)
+                continue
         for item in cfg.active.workshop.servermods:
             log.info("Workshop: %s '%s' (id=%s) -> category=%s validate=%s dry_run=%s", "ensure", item.name or "<unnamed>", item.id, "servermods", validate, dry_run )
-            r = self.ensure_workshop_item("servermods", item, validate=validate, dry_run=dry_run)
-            if r: results.append(r)
+            try:
+                r = self.ensure_workshop_item("servermods", item, validate=validate, dry_run=dry_run)
+                if r:
+                    results.append(r)
+            except Exception as e:
+                wid = int(item.id)
+                name = item.name or str(wid)
+                reason = str(e)
+                if item.required:
+                    log.error("Workshop REQUIRED item failed: %s (%s) kind=servermods :: %s", name, wid, reason)
+                    failures.append(("servermods", name, wid, reason))
+                else:
+                    log.warning("Workshop OPTIONAL item failed: %s (%s) kind=servermods :: %s", name, wid, reason)
+                continue
+
+        if failures:
+            # One final error that the caller can render in UI (without losing earlier log lines).
+            msg = "Required workshop items failed:\n" + "\n".join(
+                [f"- {k}: {n} ({wid}) :: {r}" for (k, n, wid, r) in failures]
+            )
+            raise RuntimeError(msg)
         return results
 
     # ---------------- Instance symlinks ----------------

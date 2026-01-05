@@ -205,7 +205,7 @@ def transform_file_config_to_internal(config_name: str, merged: FileConfig_Defau
         spec = DLC_CATALOG.get(key)
         if not spec:
             continue
-        dlcs.append(DlcSpec(**spec))
+        dlcs.append(DlcSpec(**spec, mount_name=key))
 
     # OCAP: FileConfig_ useOCAP flag -> V2 ocap config
     ocap = OcapConfig(

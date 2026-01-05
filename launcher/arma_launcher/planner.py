@@ -25,5 +25,5 @@ class Plan:
         return {
             "ok": self.ok,
             "actions": [a.to_dict() for a in self.actions],
-            "notes": list(self.notes),
+            "notes": list(self.notes)
         }

@@ -2,28 +2,63 @@ from __future__ import annotations
 import subprocess
 import threading
 import shlex
+import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
+import codecs
 from .settings import Settings
 from .steam_credentials import load_credentials
 from .logging_setup import get_logger
 
 log = get_logger("arma.launcher.steamcmd")
 
+@dataclass(frozen=True)
+class SteamCmdError(RuntimeError):
+    kind: str          # e.g. "NOT_FOUND", "ACCESS_DENIED", "FAILED"
+    message: str
+    last_lines: tuple[str, ...] = ()
 
-def _pump(pipe, log_fn, prefix: str) -> None:
+    def __str__(self) -> str:
+        if self.last_lines:
+            tail = " | ".join(self.last_lines[-5:])
+            return f"{self.message} (kind={self.kind}) :: {tail}"
+        return f"{self.message} (kind={self.kind})"
+
+_RE_NOT_FOUND = re.compile(r"(File Not Found|No subscription|Invalid PublishedFileId)", re.IGNORECASE)
+_RE_ACCESS    = re.compile(r"(Access Denied|private|requires purchase)", re.IGNORECASE)
+
+
+def _pump_bytes(pipe, log_fn, prefix: str, ring: list[str], ring_max: int = 50) -> None:
+    """
+    SteamCMD prints progress using carriage returns ('\\r') to rewrite the same line.
+    readline() won't emit these. We therefore read bytes and split on both '\\r' and '\\n'.
+    """
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+    buf = ""
     try:
-        for line in iter(pipe.readline, ""):
-            if not line:
+        while True:
+            chunk = pipe.read(4096)
+            if not chunk:
                 break
-            line = line.rstrip("\n")
-            if line:
-                log_fn("%s%s", prefix, line)
-    finally:
-        try:
-            pipe.close()
-        except Exception:
-            pass
+            text = decoder.decode(chunk)
+            buf += text
+            parts = []
+            start = 0
+            for i, ch in enumerate(buf):
+                if ch == "\n" or ch == "\r":
+                    parts.append(buf[start:i])
+                    start = i + 1
+            buf = buf[start:]
+            for line in parts:
+                line = line.strip()
+                if line:
+                    log_fn("%s%s", prefix, line)
+                    ring.append(line)
+                    if len(ring) > ring_max:
+                        del ring[: len(ring) - ring_max]
+    except Exception:
+        return
 
 class SteamCMD:
     def __init__(self, settings: Settings):
@@ -38,24 +73,49 @@ class SteamCMD:
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,
+            text=False,
+            bufsize=0,
         )
 
         assert proc.stdout is not None
         assert proc.stderr is not None
 
-        t_out = threading.Thread(target=_pump, args=(proc.stdout, log.info, "[steamcmd] "), daemon=True)
-        t_err = threading.Thread(target=_pump, args=(proc.stderr, log.warning, "[steamcmd] "), daemon=True)
+        ring: list[str] = []
+        t_out = threading.Thread(target=_pump_bytes, args=(proc.stdout, log.info, "[steamcmd] ", ring), daemon=True)
+        t_err = threading.Thread(target=_pump_bytes, args=(proc.stderr, log.warning, "[steamcmd] ", ring), daemon=True)
+         
         t_out.start()
         t_err.start()
 
-        rc = proc.wait()
-        t_out.join(timeout=1)
-        t_err.join(timeout=1)
+        try:
+            rc = proc.wait()
+        except KeyboardInterrupt:
+            # stop steamcmd cleanly so we don't leave it running in the container
+            log.warning("SteamCMD interrupted by user, terminating...")
+            try:
+                proc.terminate()
+            except Exception:
+                pass
+            try:
+                proc.wait(timeout=10)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+            raise
+        finally:
+            t_out.join(timeout=1)
+            t_err.join(timeout=1)
 
         if rc != 0:
-            raise RuntimeError(f"SteamCMD failed (rc={rc}). See launcher.log for details.")
+            tail = tuple(ring[-10:])
+            joined = "\n".join(tail)
+            if _RE_NOT_FOUND.search(joined):
+                raise SteamCmdError(kind="NOT_FOUND", message="SteamCMD workshop download failed: item not found", last_lines=tail)
+            if _RE_ACCESS.search(joined):
+                raise SteamCmdError(kind="ACCESS_DENIED", message="SteamCMD workshop download failed: access denied/private", last_lines=tail)
+            raise SteamCmdError(kind="FAILED", message=f"SteamCMD failed (rc={rc})", last_lines=tail)
 
     def ensure_app(self, app_id: int, install_dir: Path, *, validate: bool = False,
                    beta_branch: Optional[str] = None, beta_password: Optional[str] = None) -> None:

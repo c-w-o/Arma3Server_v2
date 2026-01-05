@@ -56,9 +56,18 @@ class Orchestrator:
         cm = ContentManager(self.settings, self.layout, steamcmd)
         cfg = self.cfg
         
-        p = self.plan()
-        log.info( "Plan: dlcs=%d mods=%d maps=%d servermods=%d hc=%s ocap=%s", len(p.dlcs), len(p.workshop_mods), len(p.workshop_maps), len(p.workshop_servermods), p.headless_count, p.ocap_enabled )
-        log.info( "Plan mods: %s", [m.id for m in p.workshop_mods])
+        dlcs_n = len(cfg.active.dlcs)
+        mods_n = len(cfg.active.workshop.mods)
+        maps_n = len(cfg.active.workshop.maps)
+        servermods_n = len(cfg.active.workshop.servermods)
+        hc_n = int(cfg.active.headless_clients.count if cfg.active.headless_clients.enabled else 0)
+        ocap = bool(cfg.active.ocap.enabled)
+
+        log.info(
+            "Plan: dlcs=%d mods=%d maps=%d servermods=%d hc=%s ocap=%s",
+            dlcs_n, mods_n, maps_n, servermods_n, hc_n, ocap
+        )
+        log.info("Plan mods: %s", [f"{m.name or 'UNKNOWN'} ({m.id})" for m in cfg.active.workshop.mods])
         
         cm.ensure_dlcs(cfg.active.dlcs, validate=cfg.active.steam.force_validate, dry_run=dry_run)
         cm.ensure_workshop(cfg, dry_run=dry_run)
@@ -91,9 +100,18 @@ class Orchestrator:
     def start_server(self) -> int:
         cfg = self.cfg
         
-        p = self.plan()
-        log.info( "Plan: dlcs=%d mods=%d maps=%d servermods=%d hc=%s ocap=%s", len(p.dlcs), len(p.workshop_mods), len(p.workshop_maps), len(p.workshop_servermods), p.headless_count, p.ocap_enabled )
-        log.info( "Plan mods: %s", [m.id for m in p.workshop_mods])
+        dlcs_n = len(cfg.active.dlcs)
+        mods_n = len(cfg.active.workshop.mods)
+        maps_n = len(cfg.active.workshop.maps)
+        servermods_n = len(cfg.active.workshop.servermods)
+        hc_n = int(cfg.active.headless_clients.count if cfg.active.headless_clients.enabled else 0)
+        ocap = bool(cfg.active.ocap.enabled)
+
+        log.info(
+            "Plan: dlcs=%d mods=%d maps=%d servermods=%d hc=%s ocap=%s",
+            dlcs_n, mods_n, maps_n, servermods_n, hc_n, ocap
+        )
+        log.info("Plan mods: %s", [f"{m.name or 'UNKNOWN'} ({m.id})" for m in cfg.active.workshop.mods])
         
         profiles = self._profiles_dir()
         profiles.mkdir(parents=True, exist_ok=True)

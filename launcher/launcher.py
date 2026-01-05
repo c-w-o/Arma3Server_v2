@@ -27,9 +27,9 @@ def _main() -> int:
         mode = os.environ.get("LAUNCHER_MODE", "dbg").strip().lower()
         if mode not in ("run", "api", "plan"):
             mode = "run"
-            sys.argv = [sys.argv[0], mode, "--dry-run"]
-        else:
-          sys.argv = [sys.argv[0], mode]
+        #    sys.argv = [sys.argv[0], mode, "--dry-run"]
+        #else:
+            sys.argv = [sys.argv[0], mode]
 
     # Delegate to the actual launcher CLI inside the package
     from arma_launcher.cli import main as pkg_main

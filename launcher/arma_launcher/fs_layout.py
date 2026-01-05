@@ -16,6 +16,7 @@ class Layout:
     inst_mpmissions: Path
     inst_logs: Path
     arma_cfg_dir: Path
+    arma_keys_dir: Path
 
 def build_layout(settings: Settings) -> Layout:
     common = settings.arma_common
@@ -32,6 +33,7 @@ def build_layout(settings: Settings) -> Layout:
         inst_mpmissions=inst / "mpmissions",
         inst_logs=inst / "logs",
         arma_cfg_dir=settings.arma_root / "config",
+        arma_keys_dir=settings.arma_root / "keys"
     )
 
 def ensure_dirs(layout: Layout) -> None:
@@ -40,5 +42,6 @@ def ensure_dirs(layout: Layout) -> None:
         layout.inst_mods, layout.inst_servermods, layout.inst_userconfig,
         layout.inst_config, layout.inst_mpmissions, layout.inst_logs,
         layout.arma_cfg_dir,
+        layout.arma_keys_dir
     ]:
         p.mkdir(parents=True, exist_ok=True)

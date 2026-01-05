@@ -39,6 +39,7 @@ class SteamConfig(BaseModel):
 class DlcSpec(BaseModel):
     name: str
     app_id: int
+    mount_name: str
     beta_branch: Optional[str] = None
     beta_password: Optional[str] = None
 

@@ -3,9 +3,11 @@ import argparse
 import json
 import uvicorn
 from .settings import Settings
-from .logging_setup import setup_logging
+from .logging_setup import setup_logging, get_logger
 from .orchestrator import Orchestrator
 from .api import create_app
+
+log = get_logger("arma.launcher.cli")
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="arma-launcher")
@@ -45,7 +47,13 @@ def main(argv=None) -> int:
             return 0 if plan.get("ok", True) else 1
 
         orch.ensure_arma()
-        orch.sync_content(dry_run=False)
+        try:
+            orch.sync_content(dry_run=False)
+        except RuntimeError as e:
+            # Important: no traceback spam; just a clean error message for UI/ops.
+            log.error("Sync failed: %s", e)
+            return 1
+    
         orch.generate_server_cfg(dry_run=False)
         if args.no_start:
             return 0
