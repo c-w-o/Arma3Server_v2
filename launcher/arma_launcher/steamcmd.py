@@ -3,6 +3,8 @@ import subprocess
 import threading
 import shlex
 import re
+import time
+import random
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
@@ -27,7 +29,7 @@ class SteamCmdError(RuntimeError):
 
 _RE_NOT_FOUND = re.compile(r"(File Not Found|No subscription|Invalid PublishedFileId)", re.IGNORECASE)
 _RE_ACCESS    = re.compile(r"(Access Denied|private|requires purchase)", re.IGNORECASE)
-
+_RE_RATE_LIMIT = re.compile(r"(Rate Limit Exceeded|Too Many Requests|HTTP\s*429)", re.IGNORECASE)
 
 def _pump_bytes(pipe, log_fn, prefix: str, ring: list[str], ring_max: int = 50) -> None:
     """
@@ -115,7 +117,34 @@ class SteamCMD:
                 raise SteamCmdError(kind="NOT_FOUND", message="SteamCMD workshop download failed: item not found", last_lines=tail)
             if _RE_ACCESS.search(joined):
                 raise SteamCmdError(kind="ACCESS_DENIED", message="SteamCMD workshop download failed: access denied/private", last_lines=tail)
+            if _RE_RATE_LIMIT.search(joined):
+                raise SteamCmdError(kind="RATE_LIMIT", message="SteamCMD rate limit exceeded", last_lines=tail)
             raise SteamCmdError(kind="FAILED", message=f"SteamCMD failed (rc={rc})", last_lines=tail)
+
+    def _run_with_backoff(self, args: List[str], *, op_name: str, max_attempts: int = 8) -> None:
+        """Run steamcmd with retries on rate limiting."""
+        base_delay_s = 5.0
+        max_delay_s = 600.0  # cap at 10 minutes
+
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                self._run(args)
+                return
+            except SteamCmdError as e:
+                if e.kind != "RATE_LIMIT" or attempt >= max_attempts:
+                    raise
+
+                delay = min(max_delay_s, base_delay_s * (2 ** (attempt - 1)))
+                jitter = random.uniform(0.0, min(10.0, delay * 0.1))
+                sleep_s = delay + jitter
+                log.warning(
+                    "SteamCMD rate limit exceeded during %s. Retry %d/%d in %.1fs",
+                    op_name, attempt, max_attempts, sleep_s
+                )
+                time.sleep(sleep_s)
+
 
     def ensure_app(self, app_id: int, install_dir: Path, *, validate: bool = False,
                    beta_branch: Optional[str] = None, beta_password: Optional[str] = None) -> None:
@@ -132,7 +161,7 @@ class SteamCMD:
         if validate:
             args.append("validate")
         args += ["+quit"]
-        self._run(args)
+        self._run_with_backoff(args, op_name=f"app_update {app_id}", max_attempts=8)
 
     def workshop_download(self, game_id: int, workshop_id: int, *, validate: bool = False) -> None:
         user, pw = load_credentials(self.settings)
@@ -143,7 +172,7 @@ class SteamCMD:
         if validate:
             args.append("validate")
         args += ["+quit"]
-        self._run(args)
+        self._run_with_backoff(args, op_name=f"workshop_download_item {workshop_id}", max_attempts=8)
         
     def _mask_steamcmd(self, cmd: List[str]) -> str:
         """

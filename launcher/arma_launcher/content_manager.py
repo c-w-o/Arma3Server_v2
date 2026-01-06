@@ -59,7 +59,7 @@ class ContentManager:
         def plan_item(kind: str, item: WorkshopItem):
             wid = int(item.id)
             name = item.name or str(wid)
-            dest_root = {"mods": self.layout.mods, "maps": self.layout.maps, "servermods": self.layout.mods}.get(kind, self.layout.mods)
+            dest_root = {"mods": self.layout.mods, "maps": self.layout.maps, "servermods": self.layout.servermods}.get(kind, self.layout.mods)
             dest = dest_root / str(wid)
             marker = dest / ".modmeta.json"
             cache = self._workshop_cache_dir(wid)
@@ -452,7 +452,7 @@ class ContentManager:
         wid = int(item.id)
         name = item.name or str(wid)
 
-        dest_root = {"mods": self.layout.mods, "maps": self.layout.maps, "servermods": self.layout.mods}.get(kind, self.layout.mods)
+        dest_root = {"mods": self.layout.mods, "maps": self.layout.maps, "servermods": self.layout.servermods}.get(kind, self.layout.mods)
         dest = dest_root / str(wid)
         marker = dest / ".modmeta.json"
         before = marker.exists()
@@ -472,7 +472,31 @@ class ContentManager:
 
         log.warning("Workshop mod not up-to-date: %s (%s) kind=%s - start downloading", name, wid, kind)
         try:
-            self.steamcmd.workshop_download(self.settings.arma_workshop_game_id, wid, validate=validate)
+            # SteamCMD can hit rate limits (ERROR (Rate Limit Exceeded)).
+            # We retry with exponential backoff + jitter to avoid hammering Steam.
+            max_attempts = 8
+            base_delay_s = 5.0
+            max_delay_s = 600.0  # cap at 10 minutes
+
+            attempt = 0
+            while True:
+                attempt += 1
+                try:
+                    self.steamcmd.workshop_download(self.settings.arma_workshop_game_id, wid, validate=validate)
+                    break  # success
+                except SteamCmdError as e:
+                    if e.kind != "RATE_LIMIT" or attempt >= max_attempts:
+                        raise
+
+                    # exponential backoff: base * 2^(attempt-1), with small jitter
+                    delay = min(max_delay_s, base_delay_s * (2 ** (attempt - 1)))
+                    jitter = random.uniform(0.0, min(5.0, delay * 0.1))
+                    sleep_s = delay + jitter
+                    log.warning(
+                        "SteamCMD rate limit exceeded downloading %s (%s). Retry %d/%d in %.1fs",
+                        name, wid, attempt, max_attempts, sleep_s
+                    )
+                    time.sleep(sleep_s)
         except SteamCmdError as e:
             # If the workshop item no longer exists / is private / access denied:
             # - required -> hard fail with a helpful message

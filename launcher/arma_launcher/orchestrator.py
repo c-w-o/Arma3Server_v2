@@ -90,7 +90,21 @@ class Orchestrator:
     def _hc_cfg_path(self) -> Path:
         return self.layout.inst_config / "generated_hc_a3client.cfg"
 
+    def _basic_cfg_path(self) -> Path | None:
+        """Return the best basic.cfg to use for -cfg.
 
+        Preference:
+          1) <instance>/config/basic.cfg (per-instance override)
+          2) <arma_root>/config/basic.cfg (shared)
+        """
+        cand1 = self.layout.inst_config / "basic.cfg"
+        if cand1.exists():
+            return cand1
+        cand2 = self.layout.arma_cfg_dir / "basic.cfg"
+        if cand2.exists():
+            return cand2
+        return None
+    
     def _build_mod_arg(self) -> str:
         parts = []
         for p in sorted(self.layout.inst_mods.iterdir()):
@@ -221,10 +235,13 @@ class Orchestrator:
         generate_profile_cfg(cfg, profiles, cfg.config_name)
         server_log = self.layout.inst_logs / "server.log"
 
+        basic_cfg = self._basic_cfg_path()
+        
         cmd = [
             str(self.settings.arma_binary),
             f"-port={cfg.server.port}",
             f"-config={self._server_cfg_path()}",
+            *([f"-cfg={basic_cfg}"] if basic_cfg else []),
             f"-profiles={profiles}",
             f"-name={cfg.config_name}",
             f"-mod={self._build_mod_arg(cfg)}",
@@ -243,6 +260,7 @@ class Orchestrator:
                     "-connect=127.0.0.1",
                     f"-port={cfg.server.port}",
                     f"-password={hc_cfg.password}",
+                    *([f"-cfg={basic_cfg}"] if basic_cfg else []),
                     f"-profiles={profiles / f'hc-{i}'}",
                     f"-name=hc-{i}",
                     f"-mod={self._build_mod_arg(cfg)}",

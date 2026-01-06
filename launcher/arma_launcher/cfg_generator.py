@@ -120,6 +120,7 @@ def generate_server_cfg(cfg: MergedConfig, out_path: Path) -> Path:
             "vonCodecQuality": str(int(s.vonCodecQuality)),
             "forcedDifficulty": _q(s.forcedDifficulty)
         }
+                
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(_render_template(tmpl, mapping) + "\n", encoding="utf-8")
         log.info("Generated server cfg (template): %s", out_path) 

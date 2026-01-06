@@ -146,6 +146,82 @@ def merge_custom_mods(base: FileConfig_CustomMods, over: Optional[FileConfig_Cus
         mods=_dedupe(list(base.mods or []) + list(over.mods or [])),
         serverMods=_dedupe(list(base.serverMods or []) + list(over.serverMods or [])),
     )
+def _merge_flag(args: List[str], flag: str, enabled: bool) -> List[str]:
+    """Ensure a boolean command-line flag exists (or not) exactly once."""
+    args = [a for a in args if a != flag]
+    if enabled:
+        args.append(flag)
+    return args
+
+
+def _merge_kv(args: List[str], prefix: str, value: Optional[int]) -> List[str]:
+    """Ensure a key=value argument exists exactly once.
+
+    Example: prefix="-limitFPS=", value=60 -> "-limitFPS=60".
+    If value is None, the argument is removed.
+    """
+    args = [a for a in args if not str(a).startswith(prefix)]
+    if value is not None:
+        args.append(f"{prefix}{value}")
+    return args
+
+
+def _apply_structured_start_params(base_args: List[str], merged: FileConfig_Defaults) -> List[str]:
+    """Apply structured defaults (autoInit, bandwidthAlg, filePatching, limitFPS, enableHT)
+    to the final runtime argument list.
+
+    We treat these fields as canonical and ensure they are reflected in the final arg list,
+    without duplicates.
+    """
+    args = [str(a).strip() for a in (base_args or []) if str(a).strip()]
+
+    # Boolean flags
+    args = _merge_flag(args, "-autoInit", bool(merged.autoInit))
+    args = _merge_flag(args, "-filePatching", bool(merged.filePatching))
+    args = _merge_flag(args, "-enableHT", bool(merged.enableHT))
+
+    # Key/value args
+    bw = int(merged.bandwidthAlg) if merged.bandwidthAlg is not None else None
+    if bw is not None and bw != 0:
+        args = _merge_kv(args, "-bandwidthAlg=", bw)
+    else:
+        args = _merge_kv(args, "-bandwidthAlg=", None)
+
+    fps = int(merged.limitFPS) if merged.limitFPS is not None else None
+    if fps is not None and fps > 0:
+        args = _merge_kv(args, "-limitFPS=", fps)
+    else:
+        args = _merge_kv(args, "-limitFPS=", None)
+
+    # Final stable de-dupe (preserve order)
+    out: List[str] = []
+    seen: set[str] = set()
+    for a in args:
+        if a in seen:
+            continue
+        seen.add(a)
+        out.append(a)
+    return out
+
+def _filter_hc_args(args: List[str]) -> List[str]:
+    """Headless clients should inherit most runtime args, but we strip server-only switches.
+
+    Keep it conservative: remove flags that are clearly server-specific.
+    """
+    server_only_exact = {
+        "-autoInit",
+    }
+    # If later you add more canonical server-only flags, put them here.
+
+    out: List[str] = []
+    for a in (args or []):
+        s = str(a).strip()
+        if not s:
+            continue
+        if s in server_only_exact:
+            continue
+        out.append(s)
+    return out
 
 
 
@@ -161,7 +237,7 @@ def merge_defaults_with_override(defaults: FileConfig_Defaults, over: FileConfig
     merged.mods = merge_mods(merged.mods, over.mods)
     merged.customMods = merge_custom_mods(merged.customMods, over.customMods)
     merged.missions = merge_missions(merged.missions, over.missions)
- 
+
     extra_args: List[str] = []
     if isinstance(over.params, list):
         extra_args = [str(x) for x in over.params]
@@ -169,7 +245,8 @@ def merge_defaults_with_override(defaults: FileConfig_Defaults, over: FileConfig
         extra = over.params.get("extra", "")
         if isinstance(extra, str) and extra.strip():
             extra_args = extra.split()
-    merged.params = list(merged.params or []) + extra_args
+
+    merged.params = _apply_structured_start_params(list(merged.params or []) + extra_args, merged)
     return merged
 
 def _to_items(entries: List[FileConfig_ModEntry]) -> List[WorkshopItem]:
@@ -213,8 +290,7 @@ def transform_file_config_to_internal(config_name: str, merged: FileConfig_Defau
     custom_mods = CustomModsConfig( mods=list(merged.customMods.mods or []), servermods=list(merged.customMods.serverMods or []) )
 
     # Headless clients
-    hc = HeadlessClientsConfig( enabled=bool(merged.numHeadless and merged.numHeadless > 0), count=int(merged.numHeadless or 0), password=merged.serverPassword, extra_args=[] )
-
+    hc = HeadlessClientsConfig( enabled=bool(merged.numHeadless and merged.numHeadless > 0), count=int(merged.numHeadless or 0), password=merged.serverPassword, extra_args=_filter_hc_args(list(merged.params or [])) )
     active = ActiveConfig( steam=SteamConfig(force_validate=False), dlcs=dlcs, workshop=workshop, headless_clients=hc, ocap=ocap, custom_mods=custom_mods )
 
     return MergedConfig( config_name=config_name, server=server, runtime=runtime, active=active )
