@@ -18,6 +18,7 @@ from .models import (
     SteamConfig,
     WorkshopConfig,
     WorkshopItem,
+    CustomModsConfig
 )
 from .models_file import (
     FileConfig_Root,
@@ -26,6 +27,7 @@ from .models_file import (
     FileConfig_Mods,
     FileConfig_Dlcs,
     FileConfig_ModEntry,
+    FileConfig_CustomMods
 )
 
 DLC_CATALOG = {
@@ -36,7 +38,7 @@ DLC_CATALOG = {
     "western_sahara": {"name": "Western Sahara", "app_id": 1681170, "beta_branch": "creatordlc"},
     "spearhead_1944": {"name": "Spearhead 1944", "app_id": 1175380, "beta_branch": "creatordlc"},
     "reaction_forces": {"name": "Reaction Forces", "app_id": 2647760, "beta_branch": "creatordlc"},
-    "expeditionary_forces": {"name": "Expeditionary Forces", "app_id": 2647780, "beta_branch": "creatordlc"},
+    "expeditionary_forces": {"name": "Expeditionary Forces", "app_id": 2647780, "beta_branch": "creatordlc"}
 }
 
 from .logging_setup import get_logger
@@ -112,35 +114,39 @@ def merge_mods(base: FileConfig_Mods, over: Optional[FileConfig_Mods]) -> FileCo
     minus_ids: Set[int] = {m.id for m in (over.minus_mods or [])}
 
     merged = FileConfig_Mods(
-        serverMods=_dedupe_and_filter(
-            list(base.serverMods or []) + list(over.serverMods or []) + list(over.extraServer or []),
-            minus_ids,
-        ),
-        baseMods=_dedupe_and_filter(
-            list(base.baseMods or []) + list(over.baseMods or []) + list(over.extraBase or []),
-            minus_ids,
-        ),
-        clientMods=_dedupe_and_filter(
-            list(base.clientMods or []) + list(over.clientMods or []) + list(over.extraClient or []),
-            minus_ids,
-        ),
-        maps=_dedupe_and_filter(
-            list(base.maps or []) + list(over.maps or []) + list(over.extraMaps or []),
-            minus_ids,
-        ),
-        missionMods=_dedupe_and_filter(
-            list(base.missionMods or []) + list(over.missionMods or []) + list(over.extraMission or []),
-            minus_ids,
-        ),
+        serverMods=_dedupe_and_filter( list(base.serverMods or []) + list(over.serverMods or []) + list(over.extraServer or []), minus_ids ),
+        baseMods=_dedupe_and_filter( list(base.baseMods or []) + list(over.baseMods or []) + list(over.extraBase or []), minus_ids ),
+        clientMods=_dedupe_and_filter( list(base.clientMods or []) + list(over.clientMods or []) + list(over.extraClient or []), minus_ids ),
+        maps=_dedupe_and_filter( list(base.maps or []) + list(over.maps or []) + list(over.extraMaps or []), minus_ids ),
+        missionMods=_dedupe_and_filter( list(base.missionMods or []) + list(over.missionMods or []) + list(over.extraMission or []), minus_ids ),
         
         extraServer=[],
         extraBase=[],
         extraClient=[],
         extraMaps=[],
         extraMission=[],
-        minus_mods=[],
+        minus_mods=[]
     )
     return merged
+
+def merge_custom_mods(base: FileConfig_CustomMods, over: Optional[FileConfig_CustomMods]) -> FileConfig_CustomMods:
+    if over is None:
+        return base
+    def _dedupe(xs: list[str]) -> list[str]:
+        out=[]
+        seen=set()
+        for x in xs:
+            s=str(x).strip()
+            if not s or s in seen:
+                continue
+            seen.add(s)
+            out.append(s)
+        return out
+    return FileConfig_CustomMods(
+        mods=_dedupe(list(base.mods or []) + list(over.mods or [])),
+        serverMods=_dedupe(list(base.serverMods or []) + list(over.serverMods or [])),
+    )
+
 
 
 def merge_defaults_with_override(defaults: FileConfig_Defaults, over: FileConfig_Override) -> FileConfig_Defaults:
@@ -153,7 +159,7 @@ def merge_defaults_with_override(defaults: FileConfig_Defaults, over: FileConfig
     merged.dlcs = merge_dlcs(merged.dlcs, over.dlcs)
 
     merged.mods = merge_mods(merged.mods, over.mods)
-
+    merged.customMods = merge_custom_mods(merged.customMods, over.customMods)
     merged.missions = merge_missions(merged.missions, over.missions)
  
     extra_args: List[str] = []
@@ -172,29 +178,16 @@ def _to_items(entries: List[FileConfig_ModEntry]) -> List[WorkshopItem]:
 
 def transform_file_config_to_internal(config_name: str, merged: FileConfig_Defaults) -> MergedConfig:
     # server.cfg basics
-    server = ServerConfig(
-        hostname=merged.hostname,
-        password=merged.serverPassword,
-        password_admin=merged.adminPassword,
-        max_players=merged.maxPlayers,
-        port=merged.port,
-    )
+    server = ServerConfig( hostname=merged.hostname, password=merged.serverPassword, password_admin=merged.adminPassword, max_players=merged.maxPlayers, port=merged.port )
 
-    runtime = RuntimeConfig(
-        cpu_count=4,
-        extra_args=list(merged.params or []),
-    )
+    runtime = RuntimeConfig( cpu_count=4, extra_args=list(merged.params or []) )
 
     # Workshop mapping: FileConfig_ unterscheidet base/client/mission – runtime braucht:
     # - mods: alles, was als -mod laufen soll
     # - servermods: -serverMod
     # - maps: extra content, wird ebenfalls in -mod gelinkt
     mods_combined = list(merged.mods.baseMods or []) + list(merged.mods.clientMods or []) + list(merged.mods.missionMods or [])
-    workshop = WorkshopConfig(
-        mods=_to_items(mods_combined),
-        maps=_to_items(merged.mods.maps),
-        servermods=_to_items(merged.mods.serverMods),
-    )
+    workshop = WorkshopConfig( mods=_to_items(mods_combined), maps=_to_items(merged.mods.maps), servermods=_to_items(merged.mods.serverMods) )
 
     # DLC boolean-map -> install specs
     dlcs = []
@@ -208,32 +201,13 @@ def transform_file_config_to_internal(config_name: str, merged: FileConfig_Defau
         dlcs.append(DlcSpec(**spec, mount_name=key))
 
     # OCAP: FileConfig_ useOCAP flag -> V2 ocap config
-    ocap = OcapConfig(
-        enabled=bool(merged.useOCAP),
-        link_to="servermods",
-        link_name="ocap",
-        source_subdir="",
-    )
+    ocap = OcapConfig( enabled=bool(merged.useOCAP), link_to="servermods", link_name="ocap", source_subdir="" )
+    
+    custom_mods = CustomModsConfig( mods=list(merged.customMods.mods or []), servermods=list(merged.customMods.serverMods or []) )
 
     # Headless clients
-    hc = HeadlessClientsConfig(
-        enabled=bool(merged.numHeadless and merged.numHeadless > 0),
-        count=int(merged.numHeadless or 0),
-        password=merged.serverPassword,
-        extra_args=[],
-    )
+    hc = HeadlessClientsConfig( enabled=bool(merged.numHeadless and merged.numHeadless > 0), count=int(merged.numHeadless or 0), password=merged.serverPassword, extra_args=[] )
 
-    active = ActiveConfig(
-        steam=SteamConfig(force_validate=False),
-        dlcs=dlcs,
-        workshop=workshop,
-        headless_clients=hc,
-        ocap=ocap,
-    )
+    active = ActiveConfig( steam=SteamConfig(force_validate=False), dlcs=dlcs, workshop=workshop, headless_clients=hc, ocap=ocap, custom_mods=custom_mods )
 
-    return MergedConfig(
-        config_name=config_name,
-        server=server,
-        runtime=runtime,
-        active=active,
-    )
+    return MergedConfig( config_name=config_name, server=server, runtime=runtime, active=active )

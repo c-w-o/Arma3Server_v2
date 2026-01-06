@@ -62,12 +62,14 @@ class Orchestrator:
         mods_n = len(cfg.active.workshop.mods)
         maps_n = len(cfg.active.workshop.maps)
         servermods_n = len(cfg.active.workshop.servermods)
+        custom_mods_n = len(cfg.active.custom_mods.mods)
+        custom_servermods_n = len(cfg.active.custom_mods.servermods)
         hc_n = int(cfg.active.headless_clients.count if cfg.active.headless_clients.enabled else 0)
         ocap = bool(cfg.active.ocap.enabled)
 
         log.info(
-            "Plan: dlcs=%d mods=%d maps=%d servermods=%d hc=%s ocap=%s",
-            dlcs_n, mods_n, maps_n, servermods_n, hc_n, ocap
+            "Plan: dlcs=%d mods=%d(+%d custom) maps=%d servermods=%d(+%d custom) hc=%d ocap=%s",
++            dlcs_n, mods_n, custom_mods_n, maps_n, servermods_n, custom_servermods_n, hc_n, ocap
         )
         log.info("Plan mods: %s", [f"{m.name or 'UNKNOWN'} ({m.id})" for m in cfg.active.workshop.mods])
         
@@ -126,6 +128,11 @@ class Orchestrator:
         # maps are also loaded via -mod
         for it in cfg.active.workshop.maps:
             tok = self._mod_token(it.id)
+            parts.append(self._prefer_game_root_token(tok))
+
+        # custom (non-Steam) mods
+        for name in cfg.active.custom_mods.mods:
+            tok = self._mod_token(name)
             parts.append(self._prefer_game_root_token(tok))
 
         # OCAP (if user chose link_to == "mods")
@@ -195,12 +202,14 @@ class Orchestrator:
         mods_n = len(cfg.active.workshop.mods)
         maps_n = len(cfg.active.workshop.maps)
         servermods_n = len(cfg.active.workshop.servermods)
+        custom_mods_n = len(cfg.active.custom_mods.mods)
+        custom_servermods_n = len(cfg.active.custom_mods.servermods)
         hc_n = int(cfg.active.headless_clients.count if cfg.active.headless_clients.enabled else 0)
         ocap = bool(cfg.active.ocap.enabled)
 
         log.info(
-            "Plan: dlcs=%d mods=%d maps=%d servermods=%d hc=%s ocap=%s",
-            dlcs_n, mods_n, maps_n, servermods_n, hc_n, ocap
+            "Plan: dlcs=%d mods=%d(+%d custom) maps=%d servermods=%d(+%d custom) hc=%d ocap=%s",
+            dlcs_n, mods_n, custom_mods_n, maps_n, servermods_n, custom_servermods_n, hc_n, ocap
         )
         log.info("Plan mods: %s", [f"{m.name or 'UNKNOWN'} ({m.id})" for m in cfg.active.workshop.mods])
         

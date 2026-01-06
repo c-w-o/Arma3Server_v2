@@ -72,6 +72,11 @@ def generate_server_cfg(cfg: MergedConfig, out_path: Path) -> None:
         f'timeStampFormat = "{s.time_stamp_format}";',
         f'logFile = "{s.log_file}";',
         f'persistent = {1 if s.persistent else 0};',
+        f'steamProtocolMaxDataSize = {s.steamMaxSize};',
+        f'disableVoN = {0 if s.disableVoN else 1};',
+        f'vonCodec = {s.vonCodec};',
+        f'vonCodecQuality = {s.vonCodecQuality};',
+        f'forcedDifficulty = "{s.forcedDifficulty}";'
     ]
 
     if s.headless_clients:

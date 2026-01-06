@@ -53,7 +53,7 @@
         "enableHT": { "type": "boolean" },
         "useOCAP": { "type": "boolean" },
         "port": { "type": "integer", "minimum": 1024, "maximum": 65535 },
-        "numHeadless": { "type": "integer", "minimum": 0 },
+        "numHeadless": { "type": "integer", "minimum": 0, "maximum": 32 },
         "world": { "type": "string" },
         "difficulty": { "type": "string" },
 
@@ -112,7 +112,25 @@
               "items": { "$ref": "#/$defs/modEntry" }
             }
           }
-        }
+        },
+        "customMods": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mods": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "serverMods": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+             }
+           }
+         }
       }
     },
 
@@ -129,7 +147,7 @@
             "hostname": { "type": "string" },
             "serverPassword": { "type": "string" },
             "useOCAP": { "type": "boolean" },
-            "numHeadless": { "type": "integer", "minimum": 0 },
+            "numHeadless": { "type": "integer", "minimum": 0, "maximum": 32 },
 
             "dlcs": {
               "type": "object",

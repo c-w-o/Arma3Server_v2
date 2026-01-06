@@ -14,6 +14,9 @@ class FileConfig_ModEntry(BaseModel):
     name: str
     id: int
 
+class FileConfig_CustomMods(BaseModel):
+    mods: List[str] = Field(default_factory=list)
+    serverMods: List[str] = Field(default_factory=list)
 
 class FileConfig_Mods(BaseModel):
     serverMods: List[FileConfig_ModEntry] = Field(default_factory=list)
@@ -75,6 +78,7 @@ class FileConfig_Defaults(BaseModel):
 
     dlcs: FileConfig_Dlcs = Field(default_factory=FileConfig_Dlcs)
     mods: FileConfig_Mods = Field(default_factory=FileConfig_Mods)
+    customMods: FileConfig_CustomMods = Field(default_factory=FileConfig_CustomMods)
 
 
 class FileConfig_Override(BaseModel):
@@ -85,6 +89,7 @@ class FileConfig_Override(BaseModel):
     serverPassword: Optional[str] = None
     dlcs: Optional[FileConfig_Dlcs] = None
     mods: Optional[FileConfig_Mods] = None
+    customMods: Optional[FileConfig_CustomMods] = None
 
     params: Optional[Dict[str, Any]] = None
     missions: Optional[List[FileConfig_Mission]] = None

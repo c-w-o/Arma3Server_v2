@@ -67,10 +67,26 @@ class ServerConfig(BaseModel):
     time_stamp_format: str = "short"     # "none" | "short" | "full"
     log_file: str = "server_console.log" # Arma's own console log file name
     persistent: bool = True
+    
+    steamMaxSize: int = 32768
+    disableVoN: bool = True
+    vonCodec: int = 1
+    vonCodecQuality: int = 1
+    forcedDifficulty: str = "custom"
+    
+    
 
 class RuntimeConfig(BaseModel):
     cpu_count: int = 4
     extra_args: List[str] = Field(default_factory=list)
+
+class CustomModsConfig(BaseModel):
+    """Non-Steam mods located in the instance-mounted custom-mods folder.
+
+    Values are folder names under ${ARMA_CUSTOM_MODS}.
+    """
+    mods: List[str] = Field(default_factory=list)
+    servermods: List[str] = Field(default_factory=list)
 
 class HeadlessClientsConfig(BaseModel):
     enabled: bool = False
@@ -100,6 +116,7 @@ class ActiveConfig(BaseModel):
     workshop: WorkshopConfig = Field(default_factory=WorkshopConfig)
     headless_clients: HeadlessClientsConfig = Field(default_factory=HeadlessClientsConfig)
     ocap: OcapConfig = Field(default_factory=OcapConfig)
+    custom_mods: CustomModsConfig = Field(default_factory=CustomModsConfig)
 
 class RootConfig(BaseModel):
     config_name: str

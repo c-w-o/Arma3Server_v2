@@ -145,6 +145,35 @@ class ContentManager:
                     will_change=True,
                     severity="info" if src.exists() else "warn",
                 ))
+                
+        # Custom (non-Steam) mods: folder names under instance custom-mods mount
+        cm = cfg.active.custom_mods
+        for name in (cm.mods or []):
+            src = self._resolve_custom_mod_dir(name)
+            token = str(name).strip()
+            if token.startswith("@"):
+                token = token[1:]
+            actions.append(PlanAction(
+                action="link_custom_mod",
+                target=f"custom-mod:{token}",
+                detail="Symlink custom mod folder into game root and instance mods",
+                paths={"src": str(src), "dst_root": str(self.settings.arma_root / ("@"+token)), "dst_inst": str(self.layout.inst_mods / token)},
+                will_change=True,
+                severity="info" if src.exists() else "warn",
+            ))
+        for name in (cm.servermods or []):
+            src = self._resolve_custom_mod_dir(name)
+            token = str(name).strip()
+            if token.startswith("@"):
+                token = token[1:]
+            actions.append(PlanAction(
+                action="link_custom_servermod",
+                target=f"custom-servermod:{token}",
+                detail="Symlink custom servermod folder into game root and instance servermods",
+                paths={"src": str(src), "dst_root": str(self.settings.arma_root / ("@"+token)), "dst_inst": str(self.layout.inst_servermods / token)},
+                will_change=True,
+                severity="info" if src.exists() else "warn",
+            ))
 
         return Plan(ok=ok, actions=actions, notes=notes)
 
@@ -359,6 +388,65 @@ class ContentManager:
 
         return (local_ts >= int(remote_ts), int(remote_ts))
 
+    def _resolve_custom_mod_dir(self, name: str) -> Path:
+        """Resolve a custom-mod folder name to an existing directory.
+ 
+        Accepts either "myMod" or "@myMod" as folder names on disk.
+        We normalize tokens to "@myMod" on the arma_root side.
+        """
+        raw = str(name).strip()
+        if not raw:
+            return self.layout.inst_custom_mods
+        # try exact
+        p1 = self.layout.inst_custom_mods / raw
+        if p1.exists():
+            return p1
+        # if name doesn't start with '@', also try '@<name>'
+        if not raw.startswith('@'):
+            p2 = self.layout.inst_custom_mods / ('@' + raw)
+            if p2.exists():
+                return p2
+        # if name starts with '@', also try without
+        if raw.startswith('@'):
+            p3 = self.layout.inst_custom_mods / raw.lstrip('@')
+            if p3.exists():
+                return p3
+        return p1
+ 
+    def _ensure_custom_mods_links(self, cfg: MergedConfig, *, dry_run: bool = False) -> None:
+        """Expose instance-mounted custom mods in places the server can load them.
+ 
+        We create:
+          - /arma3/custom-mods -> <instance>/custom-mods
+          - /arma3/@<name> -> <instance>/custom-mods/<name>
+          - <instance>/mods/<name> -> <instance>/custom-mods/<name> (fallback)
+          - <instance>/servermods/<name> -> <instance>/custom-mods/<name> (fallback)
+        """
+        # Link the root folder
+        if self.layout.arma_custom_mods_dir.exists() and self.layout.arma_custom_mods_dir.is_dir() and not self.layout.arma_custom_mods_dir.is_symlink():
+            # keep directory if already created by something else
+            pass
+        else:
+            self._symlink(src=self.layout.inst_custom_mods, dst=self.layout.arma_custom_mods_dir, dry_run=dry_run)
+ 
+        def link_one(name: str, kind: str) -> None:
+            src_dir = self._resolve_custom_mod_dir(name)
+            token = str(name).strip()
+            if token.startswith('@'):
+                token = token[1:]
+            if not token:
+                return
+            dst_token = self.settings.arma_root / f"@{token}"
+            self._symlink(src=src_dir, dst=dst_token, dry_run=dry_run)
+            if kind == 'mods':
+                self._symlink(src=src_dir, dst=self.layout.inst_mods / token, dry_run=dry_run)
+            else:
+                self._symlink(src=src_dir, dst=self.layout.inst_servermods / token, dry_run=dry_run)
+ 
+        for name in cfg.active.custom_mods.mods:
+            link_one(name, 'mods')
+        for name in cfg.active.custom_mods.servermods:
+            link_one(name, 'servermods')
 
     def ensure_workshop_item(self, kind: str, item: WorkshopItem, *, validate: bool, dry_run: bool = False) -> Optional[InstallResult]:
         wid = int(item.id)
@@ -582,7 +670,7 @@ class ContentManager:
                 link_into_game_root(wid_link_name(it.id), src)
 
         for it in cfg.active.workshop.servermods:
-            src = self.layout.mods / str(it.id)
+            src = self.layout.servermods  / str(it.id)
             if src.exists():
                 self._recreate_link(self.layout.inst_servermods / str(it.id), src, dry_run=dry_run)
                 link_into_game_root(wid_link_name(it.id), src)
@@ -595,6 +683,25 @@ class ContentManager:
             self._recreate_link(dst_base / oc.link_name, src, dry_run=dry_run)
             oc_link = oc.link_name if oc.link_name.startswith("@") else f"@{oc.link_name}"
             link_into_game_root(oc_link, src)
+
+        # --- Custom mods (non-Steam)
+        cm = cfg.active.custom_mods
+        for item in (cm.mods or []):
+            src = self.layout.inst_custom_mods / item.name
+            if src.exists():
+                # fallback for absolute paths
+                self._recreate_link(self.layout.inst_mods / item.name, src, dry_run=dry_run)
+                link_into_game_root(self._mod_token(item.name), src)
+            elif item.required:
+                log.warning("Required custom mod missing: %s (expected %s)", item.name, src)
+
+        for item in (cm.servermods or []):
+            src = self.layout.inst_custom_mods / item.name
+            if src.exists():
+                self._recreate_link(self.layout.inst_servermods / item.name, src, dry_run=dry_run)
+                link_into_game_root(self._mod_token(item.name), src)
+            elif item.required:
+                log.warning("Required custom servermod missing: %s (expected %s)", item.name, src)
 
         # --- Missions: make /arma3/mpmissions point to instance missions folder
         missions_src = self.layout.inst_mpmissions
