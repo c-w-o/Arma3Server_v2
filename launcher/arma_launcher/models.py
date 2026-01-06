@@ -43,15 +43,22 @@ class DlcSpec(BaseModel):
     beta_branch: Optional[str] = None
     beta_password: Optional[str] = None
 
+
+class Admin(BaseModel):
+    name: str
+    steamid: Optional[str] = None
+
 class ServerConfig(BaseModel):
     hostname: str = "Arma 3 Server"
     password: str = ""
     password_admin: str = ""
+    server_command_password: str = ""
+    admins: List[Admin] = Field(default_factory=list)
     max_players: int = 40
     port: int = 2302
     profiles_subdir: str = "profiles"
     missions_dir: str = "mpmissions"
-    battleye: bool = True
+    battleye: bool = False
     verify_signatures: int = 0
     motd: List[str] = Field(default_factory=list)
     motd_interval: int = 5

@@ -1,0 +1,36 @@
+hostname = "{{hostname}}";
+password = "{{password}}";
+passwordAdmin = "{{password_admin}}";
+serverCommandPassword = "{{server_command_password}}";
+
+admins[] = { {{admins_array}} };
+
+maxPlayers = {{max_players}};
+verifySignatures = {{verify_signatures}};
+BattlEye = {{battleye}};
+steamProtocolMaxDataSize =  {{steamProtocolMaxDataSize}};
+kickDuplicate = {{kick_duplicate}};
+allowedFilePatching = {{allowed_file_patching}};
+
+allowedLoadFileExtensions[] = {"hpp","sqs","sqf","fsm","cpp","paa","txt","xml","inc","ext","sqm","ods","fxy","lip","csv","kb","bik","bikb","html","htm","biedi"};
+allowedPreprocessFileExtensions[] = {"hpp","sqs","sqf","fsm","cpp","paa","txt","xml","inc","ext","sqm","ods","fxy","lip","csv","kb","bik","bikb","html","htm","biedi"};
+allowedHTMLLoadExtensions[] = {"htm","html","xml","txt"}; //only allow files with those extensions to be loaded via HTMLLoad command (since Arma 3 build 1.27.126715)
+
+
+disableVoN = 0;
+vonCodec = 1;
+vonCodecQuality = 30;
+persistent = 1;
+
+onUserConnected = "";
+onUserDisconnected = "";
+doubleIdDetected = "";
+
+forcedDifficulty = {{forcedDifficulty}};
+
+class Missions {
+     class Mission1 {
+        template = Redshirt%20Basis.Malden;
+        difficulty = "custom";
+     };
+};

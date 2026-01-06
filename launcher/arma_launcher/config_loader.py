@@ -178,8 +178,15 @@ def _to_items(entries: List[FileConfig_ModEntry]) -> List[WorkshopItem]:
 
 def transform_file_config_to_internal(config_name: str, merged: FileConfig_Defaults) -> MergedConfig:
     # server.cfg basics
-    server = ServerConfig( hostname=merged.hostname, password=merged.serverPassword, password_admin=merged.adminPassword, max_players=merged.maxPlayers, port=merged.port )
-
+    server = ServerConfig(
+        hostname=merged.hostname,
+        password=merged.serverPassword,
+        password_admin=merged.adminPassword,
+        max_players=merged.maxPlayers,
+        port=merged.port,
+        server_command_password=merged.serverCommandPassword,
+        admins=[{"name": a.name, "steamid": a.steamid} for a in (merged.admins or [])],
+    )
     runtime = RuntimeConfig( cpu_count=4, extra_args=list(merged.params or []) )
 
     # Workshop mapping: FileConfig_ unterscheidet base/client/mission – runtime braucht:
