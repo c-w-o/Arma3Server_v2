@@ -30,6 +30,7 @@ class SteamCmdError(RuntimeError):
 _RE_NOT_FOUND = re.compile(r"(File Not Found|No subscription|Invalid PublishedFileId)", re.IGNORECASE)
 _RE_ACCESS    = re.compile(r"(Access Denied|private|requires purchase)", re.IGNORECASE)
 _RE_RATE_LIMIT = re.compile(r"(Rate Limit Exceeded|Too Many Requests|HTTP\s*429)", re.IGNORECASE)
+_RE_TIMEOUT = re.compile(r"(returned error\s+Timeout|\bTimeout\b|Connection timed out|No Connection)", re.IGNORECASE)
 
 def _pump_bytes(pipe, log_fn, prefix: str, ring: list[str], ring_max: int = 50) -> None:
     """
@@ -119,10 +120,12 @@ class SteamCMD:
                 raise SteamCmdError(kind="ACCESS_DENIED", message="SteamCMD workshop download failed: access denied/private", last_lines=tail)
             if _RE_RATE_LIMIT.search(joined):
                 raise SteamCmdError(kind="RATE_LIMIT", message="SteamCMD rate limit exceeded", last_lines=tail)
+            if _RE_TIMEOUT.search(joined):
+                raise SteamCmdError(kind="TIMEOUT", message="SteamCMD request timed out", last_lines=tail)
             raise SteamCmdError(kind="FAILED", message=f"SteamCMD failed (rc={rc})", last_lines=tail)
 
     def _run_with_backoff(self, args: List[str], *, op_name: str, max_attempts: int = 8) -> None:
-        """Run steamcmd with retries on rate limiting."""
+        """Run steamcmd with retries on transient errors (rate limit, timeouts)."""
         base_delay_s = 5.0
         max_delay_s = 600.0  # cap at 10 minutes
 
@@ -133,15 +136,15 @@ class SteamCMD:
                 self._run(args)
                 return
             except SteamCmdError as e:
-                if e.kind != "RATE_LIMIT" or attempt >= max_attempts:
+                if e.kind not in ("RATE_LIMIT", "TIMEOUT") or attempt >= max_attempts:
                     raise
 
                 delay = min(max_delay_s, base_delay_s * (2 ** (attempt - 1)))
                 jitter = random.uniform(0.0, min(10.0, delay * 0.1))
                 sleep_s = delay + jitter
                 log.warning(
-                    "SteamCMD rate limit exceeded during %s. Retry %d/%d in %.1fs",
-                    op_name, attempt, max_attempts, sleep_s
+                    "SteamCMD transient error (%s) during %s. Retry %d/%d in %.1fs",
+                    e.kind, op_name, attempt, max_attempts, sleep_s
                 )
                 time.sleep(sleep_s)
 

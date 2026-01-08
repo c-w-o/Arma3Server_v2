@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import itertools
 import os
 import shutil
 import urllib.parse
@@ -59,7 +60,7 @@ class ContentManager:
         def plan_item(kind: str, item: WorkshopItem):
             wid = int(item.id)
             name = item.name or str(wid)
-            dest_root = {"mods": self.layout.mods, "maps": self.layout.maps, "servermods": self.layout.servermods}.get(kind, self.layout.mods)
+            dest_root = {"mods": self.layout.mods, "clientmods": self.layout.mods, "maps": self.layout.maps, "servermods": self.layout.servermods}.get(kind, self.layout.mods)
             dest = dest_root / str(wid)
             marker = dest / ".modmeta.json"
             cache = self._workshop_cache_dir(wid)
@@ -177,15 +178,98 @@ class ContentManager:
 
         return Plan(ok=ok, actions=actions, notes=notes)
 
+    def _resolve_dlc_link_source(self, target: Path, mount_name: str) -> Path:
+        """
+        SteamCMD installs for Creator DLCs sometimes result in layouts like:
+          <target>/addons
+          <target>/<mount_name>/addons
+          <target>/<something>/addons
+
+        The server expects /arma3/<mount_name> to be the folder that contains 'addons/'.
+        We therefore pick the most plausible folder to link.
+        """
+        # 1) direct
+        if (target / "addons").exists():
+            return target
+
+        # 2) nested by mount_name
+        candidate = target / mount_name
+        if (candidate / "addons").exists():
+            return candidate
+
+        # 3) any immediate child with addons
+        try:
+            children = [p for p in target.iterdir() if p.is_dir()]
+        except Exception:
+            children = []
+
+        hits = [p for p in children if (p / "addons").exists()]
+        if len(hits) == 1:
+            return hits[0]
+        if len(hits) > 1:
+            # deterministic pick, but warn
+            pick = sorted(hits, key=lambda x: x.name)[0]
+            log.warning("DLC layout ambiguous under %s (multiple addons/ dirs). Picking %s", target, pick)
+            return pick
+
+        # 4) fallback: link the target; server may still work if structure is flat but different
+        log.warning("Could not find 'addons' folder in DLC install at %s; linking install root", target)
+        return target
+
+    def ensure_bonus_folders_linked(self, names: list[str], *, dry_run: bool = False) -> None:
+        """
+        Old-launcher parity:
+        Ensure selected built-in/bonus folders (e.g. aow/argo/curator) live in shared dlcs store
+        and are symlinked into the game root (/arma3/<name>).
+        If the folder currently exists as a real dir in /arma3, migrate it into the shared store first.
+        """
+        for name in names:
+            token = str(name).strip().lower()
+            if not token:
+                continue
+
+            store = self.layout.dlcs / token
+            link_dst = self.settings.arma_root / token
+
+            if dry_run:
+                continue
+
+            # Ensure shared store exists
+            store.parent.mkdir(parents=True, exist_ok=True)
+
+            # MIGRATION: if /arma3/<token> exists as a real dir, move it into the shared store
+            if link_dst.exists() and link_dst.is_dir() and not link_dst.is_symlink():
+                # If store already exists and has content, we do NOT overwrite it.
+                if store.exists() and any(store.iterdir()):
+                    log.warning("Bonus folder %s exists in game root and store already non-empty; leaving game root as-is: %s", token, link_dst)
+                else:
+                    # replace empty/non-existing store with migrated content
+                    if store.exists():
+                        shutil.rmtree(store)
+                    try:
+                        shutil.move(str(link_dst), str(store))
+                        log.info("Migrated bonus folder %s from %s -> %s", token, link_dst, store)
+                    except Exception as e:
+                        log.error("Failed to migrate bonus folder %s: %s", token, e)
+                        continue
+
+            # If store doesn't exist yet, create it (empty is okay)
+            store.mkdir(parents=True, exist_ok=True)
+
+            # Finally ensure /arma3/<token> is a symlink to shared store
+            self._recreate_link(link_dst, store, dry_run=False)
+            log.info("Linked bonus folder %s: %s -> %s", token, link_dst, store)
+    
     # ---------------- DLCs (app_id installs) ----------------
     def ensure_dlcs(self, dlcs: List[DlcSpec], *, validate: bool, dry_run: bool = False) -> List[InstallResult]:
         results: List[InstallResult] = []
         for d in dlcs:
-            target = self.layout.dlcs / str(d.app_id)
             target = self.layout.dlcs / str(d.mount_name)
             marker = target / ".modmeta.json"
             before = marker.exists()
-            link_dst = self.settings.arma_root / str(d.mount_name)
+
+            link_dst_legacy = self.settings.arma_root / str(d.mount_name)
+            link_dst_dir = self.settings.arma_root / "dlcs" / str(d.mount_name)
 
             if dry_run:
                 results.append(InstallResult("dlc", str(d.app_id), target, changed=not before))
@@ -194,9 +278,23 @@ class ContentManager:
             if self.settings.skip_install:
                 log.info("SKIP_INSTALL: not installing DLC %s (%s)", d.name, d.app_id)
             else:
-                self.steamcmd.ensure_app( d.app_id, install_dir=target, validate=validate, beta_branch=d.beta_branch, beta_password=d.beta_password )
+                # Install into the shared DLC store (host mounted)
+                self.steamcmd.ensure_app(
+                    d.app_id,
+                    install_dir=target,
+                    validate=validate,
+                    beta_branch=d.beta_branch,
+                    beta_password=d.beta_password,
+                )
                 self._write_modmeta(marker, steamid=str(d.app_id), name=d.name, timestamp=self._now_epoch())
-                self._recreate_link(link_dst, target, dry_run=False)
+                link_src = self._resolve_dlc_link_source(target, str(d.mount_name))
+                try:
+                    (self.settings.arma_root / "dlcs").mkdir(parents=True, exist_ok=True)
+                except Exception:
+                    pass
+
+                self._recreate_link(link_dst_legacy, link_src, dry_run=False)
+                self._recreate_link(link_dst_dir, link_src, dry_run=False)
 
             results.append(InstallResult("dlc", str(d.app_id), target, changed=not before))
         return results
@@ -452,7 +550,7 @@ class ContentManager:
         wid = int(item.id)
         name = item.name or str(wid)
 
-        dest_root = {"mods": self.layout.mods, "maps": self.layout.maps, "servermods": self.layout.servermods}.get(kind, self.layout.mods)
+        dest_root = {"mods": self.layout.mods, "clientmods": self.layout.mods, "maps": self.layout.maps, "servermods": self.layout.servermods}.get(kind, self.layout.mods)
         dest = dest_root / str(wid)
         marker = dest / ".modmeta.json"
         before = marker.exists()
@@ -485,7 +583,7 @@ class ContentManager:
                     self.steamcmd.workshop_download(self.settings.arma_workshop_game_id, wid, validate=validate)
                     break  # success
                 except SteamCmdError as e:
-                    if e.kind != "RATE_LIMIT" or attempt >= max_attempts:
+                    if e.kind not in ("RATE_LIMIT", "TIMEOUT") or attempt >= max_attempts:
                         raise
 
                     # exponential backoff: base * 2^(attempt-1), with small jitter
@@ -493,8 +591,8 @@ class ContentManager:
                     jitter = random.uniform(0.0, min(5.0, delay * 0.1))
                     sleep_s = delay + jitter
                     log.warning(
-                        "SteamCMD rate limit exceeded downloading %s (%s). Retry %d/%d in %.1fs",
-                        name, wid, attempt, max_attempts, sleep_s
+                        "SteamCMD transient error (%s) downloading %s (%s). Retry %d/%d in %.1fs",
+                        e.kind, name, wid, attempt, max_attempts, sleep_s
                     )
                     time.sleep(sleep_s)
         except SteamCmdError as e:
@@ -590,6 +688,21 @@ class ContentManager:
                     failures.append(("mods", name, wid, reason))
                 else:
                     log.warning("Workshop OPTIONAL item failed: %s (%s) kind=mods :: %s", name, wid, reason)
+                continue
+        for item in cfg.active.workshop.clientmods:
+            try:
+                r = self.ensure_workshop_item("clientmods", item, validate=validate, dry_run=dry_run)
+                if r:
+                    results.append(r)
+            except Exception as e:
+                wid = int(item.id)
+                name = item.name or str(wid)
+                reason = str(e)
+                if item.required:
+                    log.error("Workshop REQUIRED item failed: %s (%s) kind=clientmods :: %s", name, wid, reason)
+                    failures.append(("clientmods", name, wid, reason))
+                else:
+                    log.warning("Workshop OPTIONAL item failed: %s (%s) kind=clientmods :: %s", name, wid, reason)
                 continue
         for item in cfg.active.workshop.maps:
             log.info("Workshop: %s '%s' (id=%s) -> category=%s validate=%s dry_run=%s", "ensure", item.name or "<unnamed>", item.id, "maps", validate, dry_run )

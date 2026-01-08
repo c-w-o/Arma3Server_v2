@@ -31,15 +31,15 @@ from .models_file import (
 )
 
 DLC_CATALOG = {
-    "contact": {"name": "Contact", "app_id": 1021790},
-    "csla_iron_curtain": {"name": "CSLA Iron Curtain", "app_id": 1294440, "beta_branch": "creatordlc"},
-    "global_mobilization": {"name": "Global Mobilization", "app_id": 1042220, "beta_branch": "creatordlc"},
-    "sog_prairie_fire": {"name": "S.O.G Prairie Fire", "app_id": 1227700, "beta_branch": "creatordlc"},
-    "western_sahara": {"name": "Western Sahara", "app_id": 1681170, "beta_branch": "creatordlc"},
-    "spearhead_1944": {"name": "Spearhead 1944", "app_id": 1175380, "beta_branch": "creatordlc"},
-    "reaction_forces": {"name": "Reaction Forces", "app_id": 2647760, "beta_branch": "creatordlc"},
-    "expeditionary_forces": {"name": "Expeditionary Forces", "app_id": 2647780, "beta_branch": "creatordlc"}
-}
+    "contact":              {"name": "Contact",               "app_id": 1021790, "mount_name": "contact"},
+    "csla_iron_curtain":    {"name": "CSLA Iron Curtain",     "app_id": 1294440, "beta_branch": "creatordlc", "mount_name": "csla"},
+    "global_mobilization":  {"name": "Global Mobilization",   "app_id": 1042220, "beta_branch": "creatordlc", "mount_name": "gm"},
+    "sog_prairie_fire":     {"name": "S.O.G Prairie Fire",    "app_id": 1227700, "beta_branch": "creatordlc", "mount_name": "vn"},
+    "western_sahara":       {"name": "Western Sahara",        "app_id": 1681170, "beta_branch": "creatordlc", "mount_name": "ws"},
+    "spearhead_1944":       {"name": "Spearhead 1944",        "app_id": 1175380, "beta_branch": "creatordlc", "mount_name": "spe"},
+    "reaction_forces":      {"name": "Reaction Forces",       "app_id": 2647760, "beta_branch": "creatordlc", "mount_name": "rf"},
+    "expeditionary_forces": {"name": "Expeditionary Forces",  "app_id": 2647780, "beta_branch": "creatordlc", "mount_name": "ef"},
+ }
 
 from .logging_setup import get_logger
 log = get_logger("arma.launcher.config")
@@ -267,11 +267,17 @@ def transform_file_config_to_internal(config_name: str, merged: FileConfig_Defau
     runtime = RuntimeConfig( cpu_count=4, extra_args=list(merged.params or []) )
 
     # Workshop mapping: FileConfig_ unterscheidet base/client/mission – runtime braucht:
-    # - mods: alles, was als -mod laufen soll
-    # - servermods: -serverMod
-    # - maps: extra content, wird ebenfalls in -mod gelinkt
-    mods_combined = list(merged.mods.baseMods or []) + list(merged.mods.clientMods or []) + list(merged.mods.missionMods or [])
-    workshop = WorkshopConfig( mods=_to_items(mods_combined), maps=_to_items(merged.mods.maps), servermods=_to_items(merged.mods.serverMods) )
+    # - mods: alles, was als -mod laufen soll (Server + Headless Clients)
+    # - servermods: -serverMod (nur Dedicated Server)
+    # - clientmods: NUR für Keys (dürfen NICHT geladen werden)
+    mods_combined = list(merged.mods.baseMods or []) + list(merged.mods.missionMods or [])
+    clientmods_combined = list(merged.mods.clientMods or [])
+    workshop = WorkshopConfig(
+        mods=_to_items(mods_combined),
+        clientmods=_to_items(clientmods_combined),
+        maps=_to_items(merged.mods.maps),
+        servermods=_to_items(merged.mods.serverMods),
+    )
 
     # DLC boolean-map -> install specs
     dlcs = []
@@ -282,7 +288,7 @@ def transform_file_config_to_internal(config_name: str, merged: FileConfig_Defau
         spec = DLC_CATALOG.get(key)
         if not spec:
             continue
-        dlcs.append(DlcSpec(**spec, mount_name=key))
+        dlcs.append(DlcSpec(**spec))
 
     # OCAP: FileConfig_ useOCAP flag -> V2 ocap config
     ocap = OcapConfig( enabled=bool(merged.useOCAP), link_to="servermods", link_name="ocap", source_subdir="" )

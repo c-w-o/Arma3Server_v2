@@ -69,13 +69,14 @@ class Orchestrator:
 
         log.info(
             "Plan: dlcs=%d mods=%d(+%d custom) maps=%d servermods=%d(+%d custom) hc=%d ocap=%s",
-+            dlcs_n, mods_n, custom_mods_n, maps_n, servermods_n, custom_servermods_n, hc_n, ocap
+            dlcs_n, mods_n, custom_mods_n, maps_n, servermods_n, custom_servermods_n, hc_n, ocap
         )
         log.info("Plan mods: %s", [f"{m.name or 'UNKNOWN'} ({m.id})" for m in cfg.active.workshop.mods])
         
         cm.ensure_dlcs(cfg.active.dlcs, validate=cfg.active.steam.force_validate, dry_run=dry_run)
         cm.ensure_workshop(cfg, dry_run=dry_run)
         cm.link_instance_content(cfg, dry_run=dry_run)
+        cm.ensure_bonus_folders_linked(["addons", "aow", "argo", "curator", "dta", "enoch", "expansion", "heli", "jets", "kart", "mark", "orange", "tacops", "tank"], dry_run=dry_run)
 
     def generate_server_cfg(self, *, dry_run: bool = False) -> Path:
         out = self.settings.arma_root / "config" / "generated_a3server.cfg"
@@ -130,9 +131,20 @@ class Orchestrator:
     def _build_mod_arg(self, cfg) -> str:
         """
         Old-style: -mod=@id;@id;...
-        Order is taken from config lists (mods first, then maps), optional OCAP if linked to mods.
+        Order is taken from config lists (DLC tokens first, then mods, then maps), optional OCAP if linked to mods.
+
+        DLC behavior (old launcher):
+          - prepend enabled DLC folder tokens (e.g. "vn", "gm", "csla") to -mod
+          - these are NOT prefixed with "@"
         """
         parts: List[str] = []
+        
+        # DLC tokens first (NOT @-prefixed). Prefer /arma3/<token> if it exists.
+        for d in (cfg.active.dlcs or []):
+            tok = str(d.mount_name).strip()
+            if not tok:
+                continue
+            parts.append(self._prefer_game_root_token(tok))
 
         # regular workshop mods
         for it in cfg.active.workshop.mods:

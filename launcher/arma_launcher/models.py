@@ -30,6 +30,7 @@ class WorkshopItem(BaseModel):
 
 class WorkshopConfig(BaseModel):
     mods: List[WorkshopItem] = Field(default_factory=list)
+    clientmods: List[WorkshopItem] = Field(default_factory=list)
     maps: List[WorkshopItem] = Field(default_factory=list)
     servermods: List[WorkshopItem] = Field(default_factory=list)
 
