@@ -1,0 +1,125 @@
+/* ======================================================
+   UI KIT 0 — Design API
+   Contract:
+   - Components MUST only read these tokens
+   - Integrators MAY override these tokens
+   ====================================================== */
+
+:root {
+  /* Marker for CSS presence detection */
+  --ui-css-loaded: 1;
+
+  /* ---- Typography ---- */
+  --ui-font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --ui-font-size: 14px;
+  --ui-line-height: 1.4;
+
+  /* ---- Radius ---- */
+  --ui-radius-sm: 6px;
+  --ui-radius-md: 10px;
+  --ui-radius-lg: 14px;
+
+  /* ---- Spacing scale ---- */
+  --ui-space-1: 4px;
+  --ui-space-2: 8px;
+  --ui-space-3: 12px;
+  --ui-space-4: 16px;
+  --ui-space-5: 20px;
+
+  /* ---- Layout ---- */
+  --ui-gap: var(--ui-space-3);
+  --ui-padding: var(--ui-space-3);
+
+  /* ---- Controls ---- */
+  --ui-control-height: 34px;
+  --ui-control-padding-x: 10px;
+  --ui-control-padding-y: 8px;
+
+  /* ---- Colors (semantic) ---- */
+  --ui-color-bg: #ffffff;
+  --ui-color-surface: #ffffff;
+  --ui-color-surface-muted: #f6f7f9;
+  --ui-color-border: #d0d4da;
+
+  --ui-color-text: #1a1a1a;
+  --ui-color-text-muted: #6b7280;
+
+  --ui-color-accent: #2563eb;
+  --ui-color-accent-hover: #1e4fd6;
+
+  --ui-color-danger: #b00020;
+  --ui-color-danger-bg: #fdecea;
+
+  --ui-color-ok: #067647;
+  --ui-color-ok-bg: #e6f6ee;
+
+  /* ---- Focus ---- */
+  --ui-focus-ring: 0 0 0 2px rgba(37, 99, 235, 0.35);
+
+  /* ---- Shadow ---- */
+  --ui-shadow-sm: 0 1px 2px rgba(0,0,0,0.06);
+
+  /* ---- Motion ---- */
+  --ui-duration-fast: 120ms;
+  --ui-ease: ease;
+}
+
+/* ======================================================
+   Theme switching
+   Contract: <html data-ui-theme="light|dark|auto">
+   ====================================================== */
+
+:root[data-ui-theme="dark"] {
+  --ui-color-bg: #0f1115;
+  --ui-color-surface: #141823;
+  --ui-color-surface-muted: #111522;
+  --ui-color-border: rgba(255,255,255,0.14);
+
+  --ui-color-text: rgba(255,255,255,0.92);
+  --ui-color-text-muted: rgba(255,255,255,0.65);
+
+  --ui-color-accent: #60a5fa;
+  --ui-color-accent-hover: #3b82f6;
+
+  --ui-color-danger: #ff6b6b;
+  --ui-color-danger-bg: rgba(255,107,107,0.14);
+
+  --ui-color-ok: #2dd4bf;
+  --ui-color-ok-bg: rgba(45,212,191,0.12);
+
+  --ui-focus-ring: 0 0 0 2px rgba(96, 165, 250, 0.35);
+  --ui-shadow-sm: 0 1px 2px rgba(0,0,0,0.35);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-ui-theme="auto"] {
+    --ui-color-bg: #0f1115;
+    --ui-color-surface: #141823;
+    --ui-color-surface-muted: #111522;
+    --ui-color-border: rgba(255,255,255,0.14);
+    --ui-color-text: rgba(255,255,255,0.92);
+    --ui-color-text-muted: rgba(255,255,255,0.65);
+    --ui-color-accent: #60a5fa;
+    --ui-color-accent-hover: #3b82f6;
+    --ui-color-danger: #ff6b6b;
+    --ui-color-danger-bg: rgba(255,107,107,0.14);
+    --ui-color-ok: #2dd4bf;
+    --ui-color-ok-bg: rgba(45,212,191,0.12);
+    --ui-focus-ring: 0 0 0 2px rgba(96, 165, 250, 0.35);
+    --ui-shadow-sm: 0 1px 2px rgba(0,0,0,0.35);
+  }
+}
+
+/* ======================================================
+   Density switching
+   Contract: <html data-ui-density="comfortable|compact">
+   ====================================================== */
+
+:root[data-ui-density="compact"] {
+  --ui-gap: var(--ui-space-2);
+  --ui-padding: var(--ui-space-2);
+  --ui-control-height: 30px;
+  --ui-control-padding-x: 8px;
+  --ui-control-padding-y: 6px;
+  --ui-font-size: 13px;
+}
