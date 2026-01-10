@@ -1,0 +1,53 @@
+name: Release (tag)
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Build dist
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Tag: ${GITHUB_REF_NAME} -> Version: ${VERSION}"
+          python --version
+          python build.py "${VERSION}"
+
+      - name: Verify dist exists
+        run: |
+          test -d dist
+          ls -la dist
+
+      - name: Pack third_party as tar.gz
+        run: |
+          test -d dist/third_party
+          tar -czf dist/third_party.tar.gz -C dist third_party
+          ls -la dist/third_party.tar.gz
+
+      - name: Create GitHub Release + upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/third_party.tar.gz
+            dist/API.md
+            dist/README.md
+            dist/Styling.md
+            dist/sbom.json
+            dist/*.js
+            dist/*.js.map
+            dist/*.css

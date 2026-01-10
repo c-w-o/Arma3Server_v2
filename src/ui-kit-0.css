@@ -1,0 +1,419 @@
+/* ======================================================
+   UI KIT 0 — Component Styles
+   ====================================================== */
+
+/* ------------------------------------------------------
+   0) Base
+   ------------------------------------------------------ */
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--ui-font-family);
+  font-size: var(--ui-font-size);
+  line-height: var(--ui-line-height);
+  background: var(--ui-color-bg);
+  color: var(--ui-color-text);
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--ui-focus-ring);
+}
+
+
+/* ------------------------------------------------------
+   1) Layout primitives
+   ------------------------------------------------------ */
+
+.row {
+  display: flex;
+  gap: var(--ui-gap);
+  flex-wrap: wrap;
+}
+
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-gap);
+}
+
+.card {
+  background: var(--ui-color-surface);
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-md);
+  padding: var(--ui-padding);
+  box-shadow: var(--ui-shadow-sm);
+}
+
+.ui-card-header {
+  font-weight: 600;
+  margin-bottom: var(--ui-space-2);
+}
+
+.ui-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-2);
+}
+
+
+/* ------------------------------------------------------
+   2) Controls
+   ------------------------------------------------------ */
+
+.ui-btn {
+  min-height: var(--ui-control-height);
+  padding: var(--ui-control-padding-y) var(--ui-control-padding-x);
+  border-radius: var(--ui-radius-md);
+  border: 1px solid var(--ui-color-border);
+  background: var(--ui-color-accent);
+  color: #fff;
+  cursor: pointer;
+  transition: background var(--ui-duration-fast) var(--ui-ease);
+}
+
+.ui-btn:hover { background: var(--ui-color-accent-hover); }
+
+.ui-btn.secondary {
+  background: var(--ui-color-surface);
+  color: var(--ui-color-text);
+}
+
+.ui-btn.danger {
+  background: var(--ui-color-danger);
+  border-color: var(--ui-color-danger);
+}
+
+.ui-input,
+.ui-select,
+.ui-textarea {
+  width: 100%;
+  min-height: var(--ui-control-height);
+  padding: var(--ui-control-padding-y) var(--ui-control-padding-x);
+  border-radius: var(--ui-radius-md);
+  border: 1px solid var(--ui-color-border);
+  background: var(--ui-color-surface);
+  color: var(--ui-color-text);
+}
+
+.ui-textarea {
+  min-height: 160px;
+  resize: vertical;
+}
+
+.ui-input.invalid,
+.ui-select.invalid,
+.ui-textarea.invalid {
+  border-color: var(--ui-color-danger);
+}
+
+
+/* ------------------------------------------------------
+   3) Text helpers + status
+   ------------------------------------------------------ */
+
+.muted {
+  color: var(--ui-color-text-muted);
+  font-size: 0.92em;
+}
+
+.ui-help {
+  font-size: 0.92em;
+  color: var(--ui-color-text-muted);
+}
+
+.ui-help.error {
+  color: var(--ui-color-danger);
+}
+
+.ui-error-list {
+  margin: var(--ui-space-1) 0 0 var(--ui-space-3);
+  padding: 0;
+}
+
+.ui-error-list li { margin: 0; }
+
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.ui-badge.ok {
+  background: var(--ui-color-ok-bg);
+  color: var(--ui-color-ok);
+}
+
+.ui-badge.error {
+  background: var(--ui-color-danger-bg);
+  color: var(--ui-color-danger);
+}
+
+
+/* ------------------------------------------------------
+   4) SelectionGroup
+   ------------------------------------------------------ */
+
+.ui-selection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-2);
+}
+
+.ui-selection-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ui-space-2);
+}
+
+.ui-selection-btn {
+  min-height: var(--ui-control-height);
+}
+
+/* semantic state */
+.ui-selection-btn.active {
+  box-shadow: inset 0 0 0 1px var(--ui-color-accent);
+}
+
+/* keyboard focus on active */
+.ui-selection-btn.active:focus-visible {
+  box-shadow:
+    inset 0 0 0 1px var(--ui-color-accent),
+    var(--ui-focus-ring);
+}
+
+
+/* ------------------------------------------------------
+   5) Tabs
+   ------------------------------------------------------ */
+
+.ui-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-2);
+}
+
+.ui-tabbar {
+  border-bottom: 1px solid var(--ui-color-border);
+  padding-bottom: var(--ui-space-1);
+}
+
+.ui-tabpanels {
+  padding-top: var(--ui-space-2);
+}
+
+.ui-tabpanel { display: block; }
+
+/* Dropdown fallback mode */
+.ui-tabs.dropdown-mode .ui-tabbar { display: none; }
+
+/* Dropdown select */
+.ui-tabselect {
+  width: 100%;
+  min-height: var(--ui-control-height);
+  padding: var(--ui-control-padding-y) var(--ui-control-padding-x);
+  border-radius: var(--ui-radius-md);
+  border: 1px solid var(--ui-color-border);
+  background: var(--ui-color-surface);
+  color: var(--ui-color-text);
+}
+
+/* Android/Chromium: options background in dark mode */
+:root[data-ui-theme="dark"] .ui-tabselect option {
+  background: var(--ui-color-surface);
+  color: var(--ui-color-text);
+}
+
+
+/* ------------------------------------------------------
+   6) Table
+   ------------------------------------------------------ */
+
+.ui-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ui-table th,
+.ui-table td {
+  border: 1px solid var(--ui-color-border);
+  padding: var(--ui-space-1) var(--ui-space-2);
+  text-align: left;
+}
+
+.ui-table th {
+  background: var(--ui-color-surface-muted);
+  font-weight: 600;
+}
+
+.ui-table.zebra tbody tr:nth-child(even) {
+  background: var(--ui-color-surface-muted);
+}
+
+.ui-table tbody tr:hover {
+  background: rgba(0, 0, 0, 0.03);
+  cursor: pointer;
+}
+
+/* Better hover in dark theme (keeps contrast soft) */
+:root[data-ui-theme="dark"] .ui-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* ======================================================
+   7) Image
+   ====================================================== */
+
+.ui-image {
+  display: block;
+}
+
+.ui-image-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.ui-image-svg > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ------------------------------------------------------
+   8) Checkbox / Switch (label wrapper)
+   ------------------------------------------------------ */
+
+.ui-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ui-space-2);
+  cursor: pointer;
+  user-select: none;
+}
+
+.ui-checkbox-text { line-height: 1.2; }
+
+
+/* ------------------------------------------------------
+   9) json-editor (JSONEditor) — Dark overrides (scoped)
+   Contract: your mount element has class="json-editor"
+   ------------------------------------------------------ */
+
+/* Helps native controls choose dark UI where supported */
+:root[data-ui-theme="dark"] .json-editor {
+  color-scheme: dark;
+}
+
+/* Make base text inherit properly */
+:root[data-ui-theme="dark"] .json-editor,
+:root[data-ui-theme="dark"] .json-editor * {
+  color: var(--ui-color-text);
+}
+
+/* Inputs / selects / textarea inside json-editor */
+:root[data-ui-theme="dark"] .json-editor input[type="text"],
+:root[data-ui-theme="dark"] .json-editor input[type="number"],
+:root[data-ui-theme="dark"] .json-editor input[type="search"],
+:root[data-ui-theme="dark"] .json-editor input[type="url"],
+:root[data-ui-theme="dark"] .json-editor input[type="email"],
+:root[data-ui-theme="dark"] .json-editor input[type="password"],
+:root[data-ui-theme="dark"] .json-editor select,
+:root[data-ui-theme="dark"] .json-editor textarea,
+:root[data-ui-theme="dark"] .json-editor .form-control,
+:root[data-ui-theme="dark"] .json-editor .property-selector-input {
+  background: var(--ui-color-surface) !important;
+  color: var(--ui-color-text) !important;
+  border: 1px solid var(--ui-color-border) !important;
+  border-radius: var(--ui-radius-md) !important;
+  min-height: var(--ui-control-height);
+  padding: var(--ui-control-padding-y) var(--ui-control-padding-x);
+}
+
+/* Options (Android/Chromium helps a lot) */
+:root[data-ui-theme="dark"] .json-editor select option {
+  background: var(--ui-color-surface) !important;
+  color: var(--ui-color-text) !important;
+}
+
+/* Buttons inside json-editor (it uses .btn/.btn-primary in many themes) */
+:root[data-ui-theme="dark"] .json-editor button,
+:root[data-ui-theme="dark"] .json-editor .btn,
+:root[data-ui-theme="dark"] .json-editor a.btn,
+:root[data-ui-theme="dark"] .json-editor [type="button"],
+:root[data-ui-theme="dark"] .json-editor [type="submit"] {
+  background: var(--ui-color-surface) !important;
+  color: var(--ui-color-text) !important;
+  border: 1px solid var(--ui-color-border) !important;
+  border-radius: var(--ui-radius-md) !important;
+  min-height: var(--ui-control-height);
+  padding: var(--ui-control-padding-y) var(--ui-control-padding-x);
+}
+
+:root[data-ui-theme="dark"] .json-editor .btn:hover,
+:root[data-ui-theme="dark"] .json-editor button:hover {
+  filter: brightness(1.08);
+}
+
+/* Primary buttons (if present) */
+:root[data-ui-theme="dark"] .json-editor .btn-primary {
+  background: var(--ui-color-accent) !important;
+  border-color: var(--ui-color-accent) !important;
+  color: #fff !important;
+}
+
+:root[data-ui-theme="dark"] .json-editor .btn-primary:hover {
+  background: var(--ui-color-accent-hover) !important;
+}
+
+/* Panels / indented blocks inside json-editor */
+:root[data-ui-theme="dark"] .json-editor .card,
+:root[data-ui-theme="dark"] .json-editor .je-indented-panel,
+:root[data-ui-theme="dark"] .json-editor .je-panel {
+  background: var(--ui-color-surface) !important;
+  border-color: var(--ui-color-border) !important;
+}
+
+/* “Object Properties” overlay / property selector */
+:root[data-ui-theme="dark"] .json-editor .je-modal,
+:root[data-ui-theme="dark"] .json-editor .je-object__modal,
+:root[data-ui-theme="dark"] .json-editor .property-selector {
+  background: var(--ui-color-surface) !important;
+  color: var(--ui-color-text) !important;
+  border: 1px solid var(--ui-color-border) !important;
+  border-radius: var(--ui-radius-md) !important;
+  box-shadow: var(--ui-shadow-sm) !important;
+}
+
+/* Header-ish areas inside overlays */
+:root[data-ui-theme="dark"] .json-editor .je-modal__header,
+:root[data-ui-theme="dark"] .json-editor .je-panel__header,
+:root[data-ui-theme="dark"] .json-editor .je-object__title {
+  background: var(--ui-color-surface-muted) !important;
+  border-bottom: 1px solid var(--ui-color-border) !important;
+}
+
+/* Avoid bright baked-in hover backgrounds */
+:root[data-ui-theme="dark"] .json-editor div[data-schematype]:not([data-schematype="object"]):hover {
+  background-color: rgba(96, 165, 250, 0.10) !important;
+}
+
+/* Avoid bright zebra defaults in json-editor tables (if theme uses them) */
+:root[data-ui-theme="dark"] .json-editor .je-table-zebra:nth-child(even),
+:root[data-ui-theme="dark"] .json-editor .table-striped tbody tr:nth-child(even) {
+  background: rgba(255,255,255,0.03) !important;
+}
+
+:root[data-ui-theme="dark"] .json-editor .je-table-border {
+  border-color: var(--ui-color-border) !important;
+}
+
+/* Checkbox tint in overlays */
+:root[data-ui-theme="dark"] .json-editor input[type="checkbox"] {
+  accent-color: var(--ui-color-accent);
+}
