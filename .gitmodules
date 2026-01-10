@@ -1,0 +1,3 @@
+[submodule "launcher/web/ui-kit-0"]
+	path = launcher/web/ui-kit-0
+	url = https://github.com/c-w-o/ui-kit-0
