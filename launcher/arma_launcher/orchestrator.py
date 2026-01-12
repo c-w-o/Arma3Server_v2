@@ -221,7 +221,12 @@ class Orchestrator:
     def _profiles_dir(self) -> Path:
         return self.layout.inst_config / "profiles"
     
-    def start_server(self) -> int:
+    def start(self) -> None:
+        """Start server (+ optional headless clients) without blocking.
+
+        The legacy method start_server() waits for the server process to exit.
+        This method is meant for the HTTP API/UI.
+        """
         cfg = self.cfg
         
         dlcs_n = len(cfg.active.dlcs)
@@ -260,12 +265,20 @@ class Orchestrator:
             f"-serverMod={self._build_servermod_arg(cfg)}",
         ] + cfg.runtime.extra_args
 
-        self.runner.start("server", cmd, cwd=self.settings.arma_root, log_file=server_log)
+        # avoid double-starts
+        st = self.runner.status()
+        if st.get("server", {}).get("running"):
+            log.warning("Server already running; ignoring start()")
+        else:
+            self.runner.start("server", cmd, cwd=self.settings.arma_root, log_file=server_log)
 
         hc_cfg = cfg.active.headless_clients
         if hc_cfg.enabled and hc_cfg.count > 0:
             for i in range(1, hc_cfg.count + 1):
-                hc_log = self.layout.inst_logs / f"hc-{i}.log"
+                name = f"hc-{i}"
+                if st.get(name, {}).get("running"):
+                    continue
+                hc_log = self.layout.inst_logs / f"{name}.log"
                 hc_cmd = [
                     str(self.settings.arma_binary),
                     "-client",
@@ -273,11 +286,14 @@ class Orchestrator:
                     f"-port={cfg.server.port}",
                     f"-password={hc_cfg.password}",
                     *([f"-cfg={basic_cfg}"] if basic_cfg else []),
-                    f"-profiles={profiles / f'hc-{i}'}",
-                    f"-name=hc-{i}",
+                    f"-profiles={profiles / name}",
+                    f"-name={name}",
                     f"-mod={self._build_mod_arg(cfg)}",
                 ] + hc_cfg.extra_args
-                self.runner.start(f"hc-{i}", hc_cmd, cwd=self.settings.arma_root, log_file=hc_log)
+                self.runner.start(name, hc_cmd, cwd=self.settings.arma_root, log_file=hc_log)
+    
+    def start_server(self) -> int:
+        self.start()
 
         server_proc = next(h.proc for h in self.runner.handles if h.name == "server")
         rc = server_proc.wait()

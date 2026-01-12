@@ -1,5 +1,8 @@
 from __future__ import annotations
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from pathlib import Path
 from .log_reader import list_logs, read_tail, read_from_cursor
@@ -13,10 +16,39 @@ class ActionResult(BaseModel):
 
 def create_app(settings: Settings) -> FastAPI:
     app = FastAPI(title="Arma Launcher API", version="0.3.0")
+    # Dev-friendly defaults (works fine behind a reverse proxy too)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    
     orch = Orchestrator(settings)
     logs_dir = settings.arma_instance / "logs"
     orch.prepare_environment()
     
+    # --- Static UI (no build step) ---
+    # Layout:
+    #   <repo>/launcher/web/app      (our launcher-control UI)
+    #   <repo>/launcher/web/ui-kit-0 (vendored ui-kit/0)
+    web_root = Path(__file__).resolve().parents[1] / "web"
+    app_root = web_root / "app"
+    kit_root = web_root / "ui-kit-0"
+
+    if app_root.exists():
+        app.mount("/app", StaticFiles(directory=str(app_root), html=True), name="app")
+    if kit_root.exists():
+        app.mount("/ui-kit-0", StaticFiles(directory=str(kit_root), html=True), name="ui-kit-0")
+
+    @app.get("/", include_in_schema=False)
+    def index():
+        # Serve the UI by default.
+        idx = app_root / "index.html"
+        if idx.exists():
+            return FileResponse(str(idx))
+        return {"ok": True, "detail": "ui_not_installed"}
 
     @app.get("/health")
     def health():
@@ -55,6 +87,23 @@ def create_app(settings: Settings) -> FastAPI:
     def stop():
         orch.stop()
         return ActionResult(ok=True, detail="stopped")
+    
+    @app.post("/start", response_model=ActionResult)
+    def start():
+        try:
+            orch.start()
+            return ActionResult(ok=True, detail="started")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.post("/restart", response_model=ActionResult)
+    def restart():
+        try:
+            orch.stop()
+            orch.start()
+            return ActionResult(ok=True, detail="restarted")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
     
     @app.get("/logs")
     def logs():
