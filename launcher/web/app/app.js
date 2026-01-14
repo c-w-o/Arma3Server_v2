@@ -128,23 +128,23 @@ store.subscribePath("status", (st) => {
   statusTable.setData(fmtStatusMap(st));
 });
 
-const btnStart = new Button("Start", { variant: "primary" }).onClick(async () => {
+const btnStart = new Button("Start", { variant: "primary" }).on("click", async () => {
   await action("/start");
   await refreshStatus();
 });
-const btnStop = new Button("Stop", { variant: "danger" }).onClick(async () => {
+const btnStop = new Button("Stop", { variant: "danger" }).on("click", async ()  => {
   await action("/stop");
   await refreshStatus();
 });
-const btnRestart = new Button("Restart", { variant: "secondary" }).onClick(async () => {
+const btnRestart = new Button("Restart", { variant: "secondary" }).on("click", async ()  => {
   await action("/restart");
   await refreshStatus();
 });
-const btnSyncDry = new Button("Sync (dry-run)", { variant: "secondary" }).onClick(async () => {
+const btnSyncDry = new Button("Sync (dry-run)", { variant: "secondary" }).on("click", async ()  => {
   const r = await action("/sync", { dryRun: true });
   store.setPath("plan", r?.data || null);
 });
-const btnSync = new Button("Sync", { variant: "primary" }).onClick(async () => {
+const btnSync = new Button("Sync", { variant: "primary" }).on("click", async ()  => {
   await action("/sync", { dryRun: false });
   await refreshStatus();
 });
@@ -180,9 +180,12 @@ const logPre = new Pre("Select a log.");
 function renderLogOptions(list, active) {
   logSelect.clear();
   logSelect.add(ui.option("Select log…", ""));
-  for (const id of list) {
-    const opt = ui.option(id, id);
-    if (id === active) opt.attr("selected", "selected");
+  for (const item of list) {
+    const info = (item && typeof item === "object") ? item : { id: String(item) };
+    const value = String(info.id ?? info.value ?? "");
+    const label = info.path ? `${info.id} — ${info.path}` : (info.id ?? String(item));
+    const opt = ui.option(label, value);
+    if (value === String(active ?? "")) opt.attr("selected", "selected");
     logSelect.add(opt);
   }
 }

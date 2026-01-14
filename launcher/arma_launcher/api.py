@@ -3,6 +3,8 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import Response
+from starlette.requests import Request
 from pydantic import BaseModel
 from pathlib import Path
 from .log_reader import list_logs, read_tail, read_from_cursor
@@ -13,6 +15,17 @@ class ActionResult(BaseModel):
     ok: bool
     detail: str | None = None
     data: dict | None = None
+
+class NoCacheStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope) -> Response:
+        resp = await super().get_response(path, scope)
+        # Dev-friendly: always fetch latest
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers["Expires"] = "0"
+        return resp
+
+
 
 def create_app(settings: Settings) -> FastAPI:
     app = FastAPI(title="Arma Launcher API", version="0.3.0")
@@ -38,9 +51,9 @@ def create_app(settings: Settings) -> FastAPI:
     kit_root = web_root / "ui-kit-0"
 
     if app_root.exists():
-        app.mount("/app", StaticFiles(directory=str(app_root), html=True), name="app")
+        app.mount("/app", NoCacheStaticFiles(directory=str(app_root), html=True), name="app")
     if kit_root.exists():
-        app.mount("/ui-kit-0", StaticFiles(directory=str(kit_root), html=True), name="ui-kit-0")
+        app.mount("/ui-kit-0", NoCacheStaticFiles(directory=str(kit_root), html=True), name="ui-kit-0")
 
     @app.get("/", include_in_schema=False)
     def index():
