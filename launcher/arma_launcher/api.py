@@ -7,6 +7,11 @@ from starlette.responses import Response
 from starlette.requests import Request
 from pydantic import BaseModel
 from pathlib import Path
+import json
+from jsonschema import validate
+from jsonschema.exceptions import ValidationError
+from .config_loader import load_json, merge_defaults_with_override, transform_file_config_to_internal
+from .models_file import FileConfig_Root
 from .log_reader import list_logs, read_tail, read_from_cursor
 from .settings import Settings
 from .orchestrator import Orchestrator
@@ -70,6 +75,53 @@ def create_app(settings: Settings) -> FastAPI:
     @app.get("/config")
     def get_config():
         return orch.cfg.model_dump()
+
+    @app.get("/configs")
+    def list_configs():
+        """List all available configuration variants and their merged mods/DLCs."""
+        cfg_path = orch.layout.inst_config / "server.json"
+        raw = load_json(cfg_path)
+
+        # Validate schema (same as config_loader.load_config)
+        schema_path = Path(__file__).resolve().parents[1] / "server_schema.json"
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        try:
+            validate(instance=raw, schema=schema)
+        except ValidationError as e:
+            raise HTTPException(status_code=400, detail=f"config_schema_invalid: {e.message}")
+
+        root = FileConfig_Root.model_validate(raw)
+
+        out = []
+        for name, over in (root.configs or {}).items():
+            merged = merge_defaults_with_override(root.defaults, over)
+            internal = transform_file_config_to_internal(name, merged)
+
+            def _items(xs):
+                return [{"id": int(it.id), "name": it.name} for it in (xs or [])]
+
+            out.append({
+                "name": name,
+                "description": getattr(over, "description", None),
+                "hostname": internal.server.hostname,
+                "port": internal.server.port,
+                "useOCAP": bool(internal.active.ocap.enabled),
+                "numHeadless": int(internal.active.headless_clients.count if internal.active.headless_clients.enabled else 0),
+                "dlcs": [{"mount": d.mount_name, "name": d.name, "app_id": d.app_id} for d in (internal.active.dlcs or [])],
+                "workshop": {
+                    "mods": _items(internal.active.workshop.mods),
+                    "maps": _items(internal.active.workshop.maps),
+                    "servermods": _items(internal.active.workshop.servermods),
+                    "clientmods": _items(internal.active.workshop.clientmods),
+                },
+                "custom": {
+                    "mods": list(internal.active.custom_mods.mods or []),
+                    "servermods": list(internal.active.custom_mods.servermods or []),
+                },
+            })
+
+        out.sort(key=lambda x: x.get("name") or "")
+        return {"ok": True, "active": root.config_name, "configs": out}
 
     @app.get("/plan")
     def plan():
