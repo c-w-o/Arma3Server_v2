@@ -7,6 +7,10 @@ export const A3CL_PATCH = 0;
 export const A3CL_VERSION = `${A3CL_MAJOR}.${A3CL_MINOR}.${A3CL_PATCH}`;
 
 import * as UI from "/ui-kit-0/src/ui-kit-0.js";
+import { createDashboardContent } from "./dashboard.js";
+import { createServerContent } from "./server.js";
+import { createModsContent } from "./mods.js";
+import { createLogsContent } from "./logs.js";
 
 const app = new UI.AppMain();
 // Setup flexbox layout for sticky footer
@@ -83,10 +87,10 @@ middle_banner.setStyle({ flex: "1", overflow: "auto" });
 {
     // Define pages/tabs
     const pages = [
-        { id: "dashboard", label: "Dashboard", content: () => new UI.Text("Dashboard content") },
-        { id: "server", label: "Server Settings", content: () => new UI.Text("Server settings content") },
-        { id: "mods", label: "Mods", content: () => new UI.Text("Mods content") },
-        { id: "logs", label: "Logs", content: () => new UI.Text("Logs content") },
+        { id: "dashboard", label: "Dashboard", content: createDashboardContent },
+        { id: "server", label: "Server Settings", content: createServerContent },
+        { id: "mods", label: "Mods", content: createModsContent },
+        { id: "logs", label: "Logs", content: createLogsContent },
     ];
 
     let currentPage = pages[0];
