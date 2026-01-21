@@ -151,7 +151,7 @@ middle_banner.setStyle({ flex: "1", overflow: "auto" });
             padding: "12px",
             borderRadius: "0",
             border: "none",
-            margin: "1px",
+            margin: "1px 0px 0px",
             cursor: "pointer",
             transition: "background-color 0.2s"
         });
