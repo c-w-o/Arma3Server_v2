@@ -119,6 +119,7 @@ def create_app(settings: Settings) -> FastAPI:
                     "servermods": list(internal.active.custom_mods.servermods or []),
                 },
             })
+            print(f"Config {name}: dlcs = {[d.name for d in (internal.active.dlcs or [])]}")
 
         out.sort(key=lambda x: x.get("name") or "")
         return {"ok": True, "active": root.config_name, "configs": out}

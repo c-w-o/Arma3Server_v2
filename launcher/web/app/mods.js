@@ -94,6 +94,8 @@ export function createModsContent() {
         const config = configs.find(c => c.name === configName);
         if (!config) return;
         
+        console.log("Config:", config); // Debug: Check if dlcs are in config
+        
         // Clear tables
         modsAndMapsTable.setData([]);
         clientModsTable.setData([]);

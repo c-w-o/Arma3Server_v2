@@ -40,13 +40,13 @@ class FileConfig_Mods(BaseModel):
 
 class FileConfig_Dlcs(BaseModel):
     contact: bool = False
-    csla_iron_curtain: bool = Field(default=False, validation_alias=AliasChoices("csla-iron-curtain"))
-    global_mobilization: bool = Field(default=False, validation_alias=AliasChoices("global-mobilization"))
-    sog_prairie_fire: bool = Field(default=False, validation_alias=AliasChoices("s.o.g-prairie-fire"))
-    western_sahara: bool = Field(default=False, validation_alias=AliasChoices("western-sahara"))
-    spearhead_1944: bool = Field(default=False, validation_alias=AliasChoices("spearhead-1944"))
-    reaction_forces: bool = Field(default=False, validation_alias=AliasChoices("reaction-forces"))
-    expeditionary_forces: bool = Field(default=False, validation_alias=AliasChoices("expeditionary-forces"))
+    csla_iron_curtain: bool = Field(default=False, alias="csla-iron-curtain")
+    global_mobilization: bool = Field(default=False, alias="global-mobilization")
+    sog_prairie_fire: bool = Field(default=False, alias="s.o.g-prairie-fire")
+    western_sahara: bool = Field(default=False, alias="western-sahara")
+    spearhead_1944: bool = Field(default=False, alias="spearhead-1944")
+    reaction_forces: bool = Field(default=False, alias="reaction-forces")
+    expeditionary_forces: bool = Field(default=False, alias="expeditionary-forces")
 
 
 class FileConfig_Mission(BaseModel):

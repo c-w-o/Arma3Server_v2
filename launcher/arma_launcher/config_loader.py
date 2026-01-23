@@ -81,10 +81,13 @@ def _merge_scalar(base, over):
 
 def merge_dlcs(base: FileConfig_Dlcs, over: Optional[FileConfig_Dlcs]) -> FileConfig_Dlcs:
     if over is None:
+        log.info("merge_dlcs: over is None, returning base")
         return base
     b = base.model_dump()
-    o = over.model_dump()
+    o = over.model_dump(by_alias=True)
+    log.info(f"merge_dlcs: base={b}, over={o}")
     b.update(o)  # override wins
+    log.info(f"merge_dlcs: merged={b}")
     return FileConfig_Dlcs.model_validate(b)
 
 
@@ -226,13 +229,15 @@ def _filter_hc_args(args: List[str]) -> List[str]:
 
 
 def merge_defaults_with_override(defaults: FileConfig_Defaults, over: FileConfig_Override) -> FileConfig_Defaults:
-    merged = defaults.model_copy(deep=True)
+    merged = defaults.model_copy()
     merged.hostname = _merge_scalar(merged.hostname, over.hostname)
     merged.serverPassword = _merge_scalar(merged.serverPassword, over.serverPassword)
     merged.useOCAP = _merge_scalar(merged.useOCAP, over.useOCAP)
     merged.numHeadless = _merge_scalar(merged.numHeadless, over.numHeadless)
 
+    log.info(f"Merging DLCs: base={defaults.dlcs.model_dump()}, over={over.dlcs.model_dump() if over.dlcs else None}")
     merged.dlcs = merge_dlcs(merged.dlcs, over.dlcs)
+    log.info(f"After merge, merged.dlcs={merged.dlcs.model_dump()}")
 
     merged.mods = merge_mods(merged.mods, over.mods)
     merged.customMods = merge_custom_mods(merged.customMods, over.customMods)
@@ -281,14 +286,17 @@ def transform_file_config_to_internal(config_name: str, merged: FileConfig_Defau
 
     # DLC boolean-map -> install specs
     dlcs = []
-    dlc_dump = merged.dlcs.model_dump()
+    dlc_dump = merged.dlcs.__dict__
+    log.info(f"DLC dump for {config_name}: {dlc_dump}")
     for key, enabled in dlc_dump.items():
         if not enabled:
             continue
         spec = DLC_CATALOG.get(key)
         if not spec:
+            log.warning(f"Unknown DLC key: {key}")
             continue
         dlcs.append(DlcSpec(**spec))
+    log.info(f"Resolved DLCs for {config_name}: {len(dlcs)} items")
 
     # OCAP: FileConfig_ useOCAP flag -> V2 ocap config
     ocap = OcapConfig( enabled=bool(merged.useOCAP), link_to="servermods", link_name="ocap", source_subdir="" )
