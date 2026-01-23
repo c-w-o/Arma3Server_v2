@@ -9,14 +9,14 @@ const rpcClient = new UI.RestClient("", {
 export function createModsContent() {
     const container = new UI.VDiv({ gap: 12 });
     
-    // Header with title and update button
+    // Get global store
+    const globalStore = UI.AppMain.getInstance()._store;
+    
+    // Header with title
     const headerRow = new UI.HDiv({ gap: 12, align: "center" });
     headerRow.add(
         new UI.Heading("Mods", { level: 3 })
     );
-    
-    // Store updateBtn in outer scope so loadConfigs can reference it
-    let updateBtn = null;
     
     container.add(headerRow);
 
@@ -25,7 +25,7 @@ export function createModsContent() {
     
     // Dropdown for selecting config
     const dropdown = new UI.Select({ placeholder: "Select a configuration..." });
-    dropdown.setValue("");
+    dropdown.bind(globalStore, "activeConfig");
     
     // Table containers
     const modsAndMapsTable = new UI.TableView();
@@ -66,17 +66,9 @@ export function createModsContent() {
     
     const dlcsList = new UI.VDiv({ gap: 6 });
     
-    // Create update button and add to header
-    updateBtn = new UI.Button("Update");
-    updateBtn.onClick(() => loadConfigs());
-    headerRow.add(updateBtn);
-    
-    // Fetch configs on demand
+    // Fetch configs automatically
     async function loadConfigs() {
         try {
-            // Disable button while loading
-            if (updateBtn) updateBtn.setDisabled(true);
-            
             // Use rpcClient to fetch configs via POST
             const data = await rpcClient.get("/configs", {});
             
@@ -85,27 +77,16 @@ export function createModsContent() {
             const configs = data.configs || [];
             const activeConfig = data.active;
             
-            // Populate dropdown with options
-            dropdown.clearOptions();
-            dropdown.addOption("Select a configuration...", "");
-            
-            configs.forEach((config) => {
-                dropdown.addOption(config.name, config.name);
-            });
-            
-            // Set active config as selected
-            if (activeConfig) {
-                dropdown.setValue(activeConfig);
-                displayModsForConfig(activeConfig, configs);
-            }
+            // Store in global store
+            const store = globalStore;
+            store.setPath("configs", configs);
+            store.setPath("activeConfig", activeConfig);
             
         } catch (error) {
             console.error("Error loading configs:", error);
-            dlcsList.clear();
-            dlcsList.add(new UI.Text(`Error: ${error.message}`));
-        } finally {
-            // Re-enable button
-            if (updateBtn) updateBtn.setDisabled(false);
+            const store = globalStore;
+            store.setPath("configs", []);
+            store.setPath("activeConfig", null);
         }
     }
     
@@ -170,24 +151,28 @@ export function createModsContent() {
     
     container.add(contentArea);
     
+    // Bind to store
+    const store = globalStore;
+    store.subscribePath("configs", (configs) => {
+        dropdown.clearOptions();
+        dropdown.addOption("Select a configuration...", "");
+        (configs || []).forEach((config) => {
+            dropdown.addOption(config.name, config.name);
+        });
+    });
+    store.subscribePath("activeConfig", (active) => {
+        const configs = store.getPath("configs") || [];
+        displayModsForConfig(active, configs);
+    });
+    
     // Handle dropdown change
     dropdown.on("change", () => {
         const selectedName = dropdown.getValue();
-        if (selectedName) {
-            // Fetch configs again to get fresh data
-            rpcClient.get("/configs", {})
-                .then(data => {
-                    if (data.ok) {
-                        displayModsForConfig(selectedName, data.configs || []);
-                    }
-                })
-                .catch(err => console.error("Error fetching configs:", err));
-        }
+        store.setPath("activeConfig", selectedName);
     });
     
-    // Store the loadConfigs function on the container for later access
-    // This will be called when the Mods tab is clicked
-    container.loadModsData = loadConfigs;
+    // Load configs automatically when content is created
+    loadConfigs();
     
     return container;
 }
