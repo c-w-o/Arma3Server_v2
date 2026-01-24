@@ -126,21 +126,19 @@ middle_banner.setStyle({ flex: "1", overflow: "auto" });
     pages.forEach((page, index) => {
         const btn = new UI.Button(page.label);
         btn.on("click", () => {
-            // Remove active style from previous button
-            if (currentButton && currentButton.element) {
-                currentButton.element.style.backgroundColor = "";
-                currentButton.element.style.opacity = "";
-            }
+            // Remove active class from all buttons
+            pages.forEach(p => {
+                if (pageContainers[p.id].button) {
+                    pageContainers[p.id].button.el.classList.remove("active");
+                }
+            });
             
             // Update current page and button
             currentPage = page;
             currentButton = btn;
             
             // Highlight active button
-            if (btn && btn.element) {
-                btn.element.style.backgroundColor = "var(--ui-color-control-active, #444)";
-                btn.element.style.opacity = "1";
-            }
+            btn.el.classList.add("active");
             
             // Show the page
             showPage(page.id);
@@ -155,6 +153,7 @@ middle_banner.setStyle({ flex: "1", overflow: "auto" });
             cursor: "pointer",
             transition: "background-color 0.2s"
         });
+        btn.el.classList.add("ui-nav-btn");
         left_navigation.add(btn);
         pageContainers[page.id].button = btn;
         
@@ -165,9 +164,9 @@ middle_banner.setStyle({ flex: "1", overflow: "auto" });
     });
 
     // Initialize with first page and highlight first button
-    if (firstButton && firstButton.element) {
+    if (firstButton) {
         currentButton = pages[0].__button = firstButton;
-        currentButton.element.style.backgroundColor = "var(--ui-color-control-active, #444)";
+        firstButton.el.classList.add("active");
         showPage(pages[0].id);
     }
 }
