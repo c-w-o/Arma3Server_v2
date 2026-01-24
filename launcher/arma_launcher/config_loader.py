@@ -308,3 +308,22 @@ def transform_file_config_to_internal(config_name: str, merged: FileConfig_Defau
     active = ActiveConfig( steam=SteamConfig(force_validate=False), dlcs=dlcs, workshop=workshop, headless_clients=hc, ocap=ocap, custom_mods=custom_mods )
 
     return MergedConfig( config_name=config_name, server=server, runtime=runtime, active=active )
+
+
+def save_config_override(config_path: Path, config_name: str, override: FileConfig_Override) -> None:
+    """Save a configuration override to server.json."""
+    raw = load_json(config_path)
+    root = FileConfig_Root.model_validate(raw)
+    
+    if config_name not in root.configs:
+        raise ValueError(f"config '{config_name}' not found in server.json")
+    
+    # Update the override
+    root.configs[config_name] = override
+    
+    # Write back to file
+    config_path.write_text(
+        json.dumps(root.model_dump(by_alias=True, exclude_none=True), indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8"
+    )
+    log.info(f"Saved override for config '{config_name}'")

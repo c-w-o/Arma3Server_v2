@@ -10,8 +10,8 @@ from pathlib import Path
 import json
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
-from .config_loader import load_json, merge_defaults_with_override, transform_file_config_to_internal
-from .models_file import FileConfig_Root
+from .config_loader import load_json, merge_defaults_with_override, transform_file_config_to_internal, save_config_override
+from .models_file import FileConfig_Root, FileConfig_Override
 from .log_reader import list_logs, read_tail, read_from_cursor
 from .settings import Settings
 from .orchestrator import Orchestrator
@@ -123,6 +123,106 @@ def create_app(settings: Settings) -> FastAPI:
 
         out.sort(key=lambda x: x.get("name") or "")
         return {"ok": True, "active": root.config_name, "configs": out}
+
+    @app.get("/defaults")
+    def get_defaults():
+        """Get base defaults (read-only)."""
+        cfg_path = orch.layout.inst_config / "server.json"
+        raw = load_json(cfg_path)
+        root = FileConfig_Root.model_validate(raw)
+        
+        return {
+            "ok": True,
+            "defaults": root.defaults.model_dump(by_alias=True)
+        }
+
+    @app.get("/config/{config_name}")
+    def get_config_detail(config_name: str):
+        """Get specific configuration with defaults, overrides, and merged view."""
+        cfg_path = orch.layout.inst_config / "server.json"
+        raw = load_json(cfg_path)
+        
+        # Validate schema
+        schema_path = Path(__file__).resolve().parents[1] / "server_schema.json"
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        try:
+            validate(instance=raw, schema=schema)
+        except ValidationError as e:
+            raise HTTPException(status_code=400, detail=f"config_schema_invalid: {e.message}")
+        
+        root = FileConfig_Root.model_validate(raw)
+        
+        if config_name not in root.configs:
+            raise HTTPException(status_code=404, detail=f"config '{config_name}' not found")
+        
+        override = root.configs[config_name]
+        merged = merge_defaults_with_override(root.defaults, override)
+        
+        def _mod_items(xs):
+            return [{"id": int(it.id), "name": it.name} for it in (xs or [])]
+        
+        return {
+            "ok": True,
+            "name": config_name,
+            "description": getattr(override, "description", None),
+            "defaults": {
+                "mods": {
+                    "serverMods": _mod_items(root.defaults.mods.serverMods),
+                    "baseMods": _mod_items(root.defaults.mods.baseMods),
+                    "clientMods": _mod_items(root.defaults.mods.clientMods),
+                    "maps": _mod_items(root.defaults.mods.maps),
+                    "missionMods": _mod_items(root.defaults.mods.missionMods),
+                    "extraServer": _mod_items(root.defaults.mods.extraServer),
+                    "extraBase": _mod_items(root.defaults.mods.extraBase),
+                    "extraClient": _mod_items(root.defaults.mods.extraClient),
+                    "extraMaps": _mod_items(root.defaults.mods.extraMaps),
+                    "extraMission": _mod_items(root.defaults.mods.extraMission),
+                    "minus_mods": _mod_items(root.defaults.mods.minus_mods),
+                }
+            },
+            "overrides": {
+                "mods": {
+                    "serverMods": _mod_items(override.mods.serverMods) if override.mods else [],
+                    "baseMods": _mod_items(override.mods.baseMods) if override.mods else [],
+                    "clientMods": _mod_items(override.mods.clientMods) if override.mods else [],
+                    "maps": _mod_items(override.mods.maps) if override.mods else [],
+                    "missionMods": _mod_items(override.mods.missionMods) if override.mods else [],
+                    "extraServer": _mod_items(override.mods.extraServer) if override.mods else [],
+                    "extraBase": _mod_items(override.mods.extraBase) if override.mods else [],
+                    "extraClient": _mod_items(override.mods.extraClient) if override.mods else [],
+                    "extraMaps": _mod_items(override.mods.extraMaps) if override.mods else [],
+                    "extraMission": _mod_items(override.mods.extraMission) if override.mods else [],
+                    "minus_mods": _mod_items(override.mods.minus_mods) if override.mods else [],
+                }
+            },
+            "merged": {
+                "mods": {
+                    "serverMods": _mod_items(merged.mods.serverMods),
+                    "baseMods": _mod_items(merged.mods.baseMods),
+                    "clientMods": _mod_items(merged.mods.clientMods),
+                    "maps": _mod_items(merged.mods.maps),
+                    "missionMods": _mod_items(merged.mods.missionMods),
+                    "extraServer": _mod_items(merged.mods.extraServer),
+                    "extraBase": _mod_items(merged.mods.extraBase),
+                    "extraClient": _mod_items(merged.mods.extraClient),
+                    "extraMaps": _mod_items(merged.mods.extraMaps),
+                    "extraMission": _mod_items(merged.mods.extraMission),
+                    "minus_mods": _mod_items(merged.mods.minus_mods),
+                }
+            }
+        }
+
+    @app.post("/config/{config_name}")
+    def save_config(config_name: str, override_data: FileConfig_Override):
+        """Save a configuration override."""
+        try:
+            cfg_path = orch.layout.inst_config / "server.json"
+            save_config_override(cfg_path, config_name, override_data)
+            return ActionResult(ok=True, detail=f"config '{config_name}' saved")
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
 
     @app.get("/plan")
     def plan():
