@@ -9,6 +9,10 @@ const rpcClient = new UI.RestClient("", {
 export function createConfigurationsContent() {
     const container = new UI.VDiv({ gap: 12 });
     
+    // State
+    let selectedConfigName = null;
+    let configData = null;
+    
     // Get global store
     const globalStore = UI.AppMain.getInstance()._store;
     
@@ -39,14 +43,9 @@ export function createConfigurationsContent() {
         new UI.Heading("Verfügbare Configs", { level: 4 }).setStyle({ margin: "0 0 8px 0" })
     );
     
-    // Placeholder for config list (wird von API geladen)
     const configList = new UI.VDiv({ gap: 4 });
-    configList.add(
-        new UI.Button("production").setStyle({ width: "100%", textAlign: "left" }),
-        new UI.Button("event").setStyle({ width: "100%", textAlign: "left" }),
-        new UI.Button("testing").setStyle({ width: "100%", textAlign: "left" })
-    );
     listDiv.add(configList);
+    const configButtons = new Map();
     
     mainLayout.add(listDiv);
     
@@ -56,84 +55,17 @@ export function createConfigurationsContent() {
     
     const tabs = new UI.Tabs();
     
-    // Tab 1: Basis (read-only)
+    // Placeholder content (wird später gefüllt)
     const basisContent = new UI.VDiv({ gap: 8 }).add(
-        new UI.Heading("Basis-Konfiguration (Defaults)", { level: 4 }).setStyle({ margin: "0" }),
-        new UI.Text("Diese Einstellungen gelten für alle Konfigurationen.").setStyle({ fontSize: "0.9em", color: "var(--ui-color-text-muted)" }),
-        
-        new UI.HDiv({ gap: 12, align: "start" }).add(
-            new UI.VDiv({ gap: 8 }).add(
-                new UI.Heading("Server", { level: 5 }).setStyle({ margin: "0" }),
-                new UI.HDiv({ gap: 8, align: "center" }).add(
-                    new UI.Span("Hostname:").setStyle({ minWidth: "100px" }),
-                    new UI.TextField("", { placeholder: "Arma 3 Dedicated Server" }).setStyle({ flex: "1" })
-                ),
-                new UI.HDiv({ gap: 8, align: "center" }).add(
-                    new UI.Span("Port:").setStyle({ minWidth: "100px" }),
-                    new UI.TextField("2302", { type: "number" }).setStyle({ width: "100px" })
-                ),
-                new UI.HDiv({ gap: 8, align: "center" }).add(
-                    new UI.Span("Max Players:").setStyle({ minWidth: "100px" }),
-                    new UI.TextField("60", { type: "number" }).setStyle({ width: "100px" })
-                )
-            ),
-            new UI.VDiv({ gap: 8 }).add(
-                new UI.Heading("Mods (Defaults)", { level: 5 }).setStyle({ margin: "0" }),
-                new UI.Text("baseMods: 37").setStyle({ fontSize: "0.9em" }),
-                new UI.Text("serverMods: 1").setStyle({ fontSize: "0.9em" }),
-                new UI.Text("clientMods: 12").setStyle({ fontSize: "0.9em" }),
-                new UI.Text("maps: 1").setStyle({ fontSize: "0.9em" })
-            )
-        ),
-        new UI.Button("Basis editieren").setStyle({ marginTop: "12px" })
+        new UI.Text("Laden...")
     );
     
-    // Tab 2: Config-Overrides
     const overridesContent = new UI.VDiv({ gap: 8 }).add(
-        new UI.Heading("Config-spezifische Overrides", { level: 4 }).setStyle({ margin: "0" }),
-        new UI.Text("Änderungen gegen die Basis-Konfiguration.").setStyle({ fontSize: "0.9em", color: "var(--ui-color-text-muted)" }),
-        
-        new UI.VDiv({ gap: 8 }).add(
-            new UI.Heading("Mods", { level: 5 }).setStyle({ margin: "0 0 6px 0" }),
-            new UI.Table({
-                columns: [
-                    { label: "Kategorie", key: "category" },
-                    { label: "Änderung", key: "change" },
-                    { label: "Anzahl", key: "count" }
-                ],
-                data: [
-                    { category: "baseMods", change: "+ Advanced Rappelling", count: "+1" },
-                    { category: "minus_mods", change: "- RHS GREF", count: "1 removed" }
-                ]
-            }).setStyle({ width: "100%" })
-        ),
-        
-        new UI.HDiv({ gap: 8 }).add(
-            new UI.Button("Mods editieren"),
-            new UI.Button("Revert").setStyle({ background: "var(--ui-color-surface)", color: "var(--ui-color-text)" })
-        ).setStyle({ marginTop: "12px" })
+        new UI.Text("Laden...")
     );
     
-    // Tab 3: Merged Preview
     const previewContent = new UI.VDiv({ gap: 8 }).add(
-        new UI.Heading("Merged Preview", { level: 4 }).setStyle({ margin: "0" }),
-        new UI.Text("Kombinierte Konfiguration (Basis + Overrides).").setStyle({ fontSize: "0.9em", color: "var(--ui-color-text-muted)" }),
-        
-        new UI.Table({
-            columns: [
-                { label: "Kategorie", key: "category" },
-                { label: "Anzahl", key: "count" },
-                { label: "Details", key: "details" }
-            ],
-            data: [
-                { category: "baseMods", count: "38", details: "37 base + 1 added" },
-                { category: "serverMods", count: "1", details: "nur base" },
-                { category: "clientMods", count: "12", details: "nur base" },
-                { category: "minus_mods", count: "1", details: "RHS GREF" }
-            ]
-        }).setStyle({ width: "100%", marginBottom: "12px" }),
-        
-        new UI.Button("Full List anzeigen")
+        new UI.Text("Laden...")
     );
     
     tabs.addTab("basis", "Basis", basisContent);
@@ -146,12 +78,149 @@ export function createConfigurationsContent() {
     container.add(mainLayout);
     
     // Bottom: Save/Cancel
+    const saveBtn = new UI.Button("Save").setStyle({ padding: "8px 16px" });
+    const cancelBtn = new UI.Button("Cancel").setStyle({ padding: "8px 16px", background: "var(--ui-color-surface)", color: "var(--ui-color-text)" });
+    
     container.add(
-        new UI.HDiv({ gap: 8 }).add(
-            new UI.Button("Save").setStyle({ padding: "8px 16px" }),
-            new UI.Button("Cancel").setStyle({ padding: "8px 16px", background: "var(--ui-color-surface)", color: "var(--ui-color-text)" })
-        )
+        new UI.HDiv({ gap: 8 }).add(saveBtn, cancelBtn)
     );
+    
+    // === API Integration ===
+    
+    // Load all configs list
+    async function loadConfigsList() {
+        try {
+            const resp = await rpcClient.get("/configs");
+            if (!resp.ok) throw new Error(resp.detail || "Failed to load configs");
+            
+            configList.el.innerHTML = ""; // Clear
+            configButtons.clear();
+            
+            for (const cfg of resp.configs) {
+                const btn = new UI.Button(cfg.name).setStyle({ width: "100%", textAlign: "left" });
+                btn.el.addEventListener("click", () => loadConfigDetail(cfg.name, { manual: true }));
+                configButtons.set(cfg.name, btn);
+                configList.add(btn);
+            }
+            
+            // Auto-select first loadable config
+            for (const cfg of resp.configs) {
+                const ok = await loadConfigDetail(cfg.name, { manual: false, silent: true });
+                if (ok) break;
+            }
+        } catch (err) {
+            console.error("Failed to load configs:", err);
+            configList.add(new UI.Text(`Fehler: ${err.message}`));
+        }
+    }
+    
+    // Load config detail with defaults, overrides, merged
+    async function loadConfigDetail(configName, { manual = false, silent = false } = {}) {
+        try {
+            selectedConfigName = configName;
+            const resp = await rpcClient.get(`/config/${encodeURIComponent(configName)}`);
+            if (!resp.ok) throw new Error(resp.detail || "Failed to load config");
+            
+            configData = resp;
+            _markSelected(configName);
+            
+            // Clear and rebuild Basis tab
+            basisContent.el.innerHTML = "";
+            basisContent.add(
+                new UI.Heading("Basis-Konfiguration (Defaults)", { level: 4 }).setStyle({ margin: "0" }),
+                new UI.Text("Diese Einstellungen gelten für alle Konfigurationen.").setStyle({ fontSize: "0.9em", color: "var(--ui-color-text-muted)" }),
+                _buildModsTable("Basis Mods", resp.defaults.mods)
+            );
+            
+            // Clear and rebuild Overrides tab
+            overridesContent.el.innerHTML = "";
+            overridesContent.add(
+                new UI.Heading("Config-spezifische Overrides", { level: 4 }).setStyle({ margin: "0" }),
+                new UI.Text(`Änderungen gegen die Basis-Konfiguration für "${configName}".`).setStyle({ fontSize: "0.9em", color: "var(--ui-color-text-muted)" }),
+                _buildModsTable("Override Mods", resp.overrides.mods)
+            );
+            
+            // Clear and rebuild Merged tab
+            previewContent.el.innerHTML = "";
+            previewContent.add(
+                new UI.Heading("Merged Preview", { level: 4 }).setStyle({ margin: "0" }),
+                new UI.Text("Kombinierte Konfiguration (Basis + Overrides).").setStyle({ fontSize: "0.9em", color: "var(--ui-color-text-muted)" }),
+                _buildModsTable("Merged Mods", resp.merged.mods)
+            );
+            
+            return true;
+        } catch (err) {
+            if (!silent) {
+                console.error("Failed to load config detail:", err);
+                basisContent.el.innerHTML = `<div style="color: red;">Fehler: ${err.message}</div>`;
+            }
+            return false;
+        }
+    }
+
+    function _markSelected(name) {
+        for (const [cfg, btn] of configButtons.entries()) {
+            btn.setStyle({ background: cfg === name ? "var(--ui-color-nav-active)" : "" });
+        }
+    }
+    
+    // Helper: Build mods table from mods object
+    function _buildModsTable(title, modsObj) {
+        const rows = [];
+        for (const [category, items] of Object.entries(modsObj)) {
+            if (items && items.length > 0) {
+                rows.push({
+                    category,
+                    count: items.length,
+                    details: items.map(m => `${m.name} (${m.id})`).join(", ")
+                });
+            }
+        }
+        
+        return new UI.VDiv({ gap: 8 }).add(
+            new UI.Heading("Mods", { level: 5 }).setStyle({ margin: "0 0 6px 0" }),
+            new UI.Table({
+                columns: [
+                    { label: "Kategorie", key: "category" },
+                    { label: "Anzahl", key: "count" },
+                    { label: "Details", key: "details" }
+                ],
+                data: rows.length > 0 ? rows : [{ category: "(leer)", count: 0, details: "" }]
+            }).setStyle({ width: "100%", fontSize: "0.9em" })
+        );
+    }
+    
+    // Save button handler
+    saveBtn.el.addEventListener("click", async () => {
+        if (!selectedConfigName) {
+            alert("Bitte wählen Sie eine Konfiguration aus");
+            return;
+        }
+        
+        try {
+            // For now, send back the override data as-is
+            const overridePayload = configData.overrides;
+            
+            const resp = await rpcClient.post(`/config/${encodeURIComponent(selectedConfigName)}`, overridePayload);
+            if (!resp.ok) throw new Error(resp.detail || "Failed to save");
+            
+            alert("Konfiguration gespeichert!");
+            await loadConfigsList(); // Refresh
+        } catch (err) {
+            console.error("Failed to save config:", err);
+            alert(`Fehler beim Speichern: ${err.message}`);
+        }
+    });
+    
+    // Cancel button handler
+    cancelBtn.el.addEventListener("click", () => {
+        if (selectedConfigName) {
+            loadConfigDetail(selectedConfigName); // Reload
+        }
+    });
+    
+    // Initial load
+    loadConfigsList();
     
     return container;
 }

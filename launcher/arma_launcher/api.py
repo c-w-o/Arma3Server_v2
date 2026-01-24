@@ -72,10 +72,6 @@ def create_app(settings: Settings) -> FastAPI:
     def health():
         return {"ok": True}
 
-    @app.get("/config")
-    def get_config():
-        return orch.cfg.model_dump()
-
     @app.get("/configs")
     def list_configs():
         """List all available configuration variants and their merged mods/DLCs."""
@@ -123,18 +119,6 @@ def create_app(settings: Settings) -> FastAPI:
 
         out.sort(key=lambda x: x.get("name") or "")
         return {"ok": True, "active": root.config_name, "configs": out}
-
-    @app.get("/defaults")
-    def get_defaults():
-        """Get base defaults (read-only)."""
-        cfg_path = orch.layout.inst_config / "server.json"
-        raw = load_json(cfg_path)
-        root = FileConfig_Root.model_validate(raw)
-        
-        return {
-            "ok": True,
-            "defaults": root.defaults.model_dump(by_alias=True)
-        }
 
     @app.get("/config/{config_name}")
     def get_config_detail(config_name: str):
@@ -223,6 +207,13 @@ def create_app(settings: Settings) -> FastAPI:
             raise HTTPException(status_code=404, detail=str(e))
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
+
+    @app.get("/config")
+    def get_config():
+        """Get active/current config."""
+        return orch.cfg.model_dump()
+
+    @app.get("/defaults")
 
     @app.get("/plan")
     def plan():
