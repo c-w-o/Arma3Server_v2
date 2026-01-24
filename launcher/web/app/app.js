@@ -8,9 +8,13 @@ export const A3CL_VERSION = `${A3CL_MAJOR}.${A3CL_MINOR}.${A3CL_PATCH}`;
 
 import * as UI from "/ui-kit-0/src/ui-kit-0.js";
 import { createDashboardContent } from "./dashboard.js";
-import { createServerContent } from "./server.js";
+import { createConfigurationsContent } from "./configurations.js";
 import { createModsContent } from "./mods.js";
 import { createLogsContent } from "./logs.js";
+import { createMonitoringContent } from "./monitoring.js";
+import { createPlayersContent } from "./players.js";
+import { createJobsContent } from "./jobs.js";
+import { createSettingsContent } from "./settings.js";
 
 const app = new UI.AppMain();
 // Setup flexbox layout for sticky footer
@@ -88,9 +92,13 @@ middle_banner.setStyle({ flex: "1", overflow: "auto" });
     // Define pages/tabs
     const pages = [
         { id: "dashboard", label: "Dashboard", content: createDashboardContent },
-        { id: "server", label: "Server Settings", content: createServerContent },
+        { id: "configurations", label: "Konfigurationen", content: createConfigurationsContent },
         { id: "mods", label: "Mods", content: createModsContent },
         { id: "logs", label: "Logs", content: createLogsContent },
+        { id: "monitoring", label: "Monitoring", content: createMonitoringContent },
+        { id: "players", label: "Spieler", content: createPlayersContent },
+        { id: "jobs", label: "Jobs", content: createJobsContent },
+        { id: "settings", label: "Einstellungen", content: createSettingsContent },
     ];
 
     let currentPage = pages[0];
