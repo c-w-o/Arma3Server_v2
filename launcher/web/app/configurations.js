@@ -170,55 +170,93 @@ export function createConfigurationsContent() {
     // Helper: Build mods table from mods object
     function _buildModsTable(title, modsObj) {
         const rows = [];
+        const modDetailMap = new Map(); // Map category -> items for later lookup
+        
         for (const [category, items] of Object.entries(modsObj)) {
             if (items && items.length > 0) {
-                const btn = new UI.Button("📋").setStyle({ 
-                    padding: "2px 8px", 
-                    fontSize: "0.8em",
-                    cursor: "pointer" 
-                });
-                btn.el.addEventListener("click", () => {
-                    const modList = items.map(m => `• ${m.name} (${m.id})`).join("\n");
-                    alert(`${category} (${items.length}):\n\n${modList}`);
-                });
-                
+                modDetailMap.set(category, items);
                 rows.push({
                     category,
-                    count: items.length,
-                    details: btn.el.outerHTML
+                    count: items.length
                 });
             }
         }
         
+        // Container für Tabelle + Details
+        const container = new UI.VDiv({ gap: 12 });
+        
+        // Mods-Tabelle
         const table = new UI.Table({
             columns: [
                 { label: "Kategorie", key: "category" },
-                { label: "Anzahl", key: "count" },
-                { label: "", key: "details" }
+                { label: "Anzahl", key: "count" }
             ],
-            data: rows.length > 0 ? rows : [{ category: "(leer)", count: 0, details: "" }]
+            data: rows.length > 0 ? rows : [{ category: "(leer)", count: 0 }]
         });
-        table.setStyle({ width: "100%", fontSize: "0.9em" });
+        table.setStyle({ width: "100%", fontSize: "0.9em", cursor: "pointer" });
         
-        // Re-attach event listeners after table render
-        setTimeout(() => {
-            const buttons = table.el.querySelectorAll("button");
-            buttons.forEach((btn, idx) => {
-                if (rows[idx]) {
-                    const category = rows[idx].category;
-                    const items = modsObj[category];
-                    btn.addEventListener("click", () => {
-                        const modList = items.map(m => `• ${m.name} (${m.id})`).join("\n");
-                        alert(`${category} (${items.length}):\n\n${modList}`);
+        // Details-Container (versteckt bis eine Zeile geklickt wird)
+        const detailsContainer = new UI.VDiv({ gap: 8 });
+        detailsContainer.setStyle({ display: "none" });
+        
+        // Event-Handler für Row-Clicks
+        table.el.addEventListener("click", (e) => {
+            const row = e.target.closest("tr");
+            if (!row) return;
+            
+            // Finde die Kategorie aus der geklickten Zeile
+            const cells = row.querySelectorAll("td");
+            if (cells.length === 0) return;
+            
+            const category = cells[0].textContent.trim();
+            const items = modDetailMap.get(category);
+            
+            if (items) {
+                // Zeige Details
+                detailsContainer.el.style.display = "block";
+                detailsContainer.el.innerHTML = "";
+                
+                // Baue Details als Liste von Reihen mit Links
+                const detailsDiv = new UI.VDiv({ gap: 4 });
+                
+                for (const mod of items) {
+                    const steamUrl = `https://steamcommunity.com/sharedfiles/filedetails/?id=${mod.id}`;
+                    
+                    const row = new UI.HDiv({ gap: 8, align: "center" }).setStyle({
+                        padding: "4px 8px",
+                        borderBottom: "1px solid var(--ui-color-border)",
+                        fontSize: "0.85em"
                     });
+                    
+                    const nameSpan = new UI.Span(mod.name).setStyle({ flex: "1" });
+                    const idSpan = new UI.Span(`(${mod.id})`).setStyle({ minWidth: "120px", textAlign: "right", color: "var(--ui-color-text-muted)" });
+                    
+                    const steamLink = new UI.Link("🔗", steamUrl, { 
+                        target: "_blank",
+                        title: "Steam Workshop öffnen"
+                    }).setStyle({
+                        textDecoration: "none",
+                        cursor: "pointer"
+                    });
+                    
+                    row.add(nameSpan, idSpan, steamLink);
+                    detailsDiv.add(row);
                 }
-            });
-        }, 0);
+                
+                detailsContainer.add(
+                    new UI.Heading(`${category} - Details`, { level: 5 }).setStyle({ margin: "0 0 6px 0" }),
+                    detailsDiv
+                );
+            }
+        });
         
-        return new UI.VDiv({ gap: 8 }).add(
+        container.add(
             new UI.Heading("Mods", { level: 5 }).setStyle({ margin: "0 0 6px 0" }),
-            table
+            table,
+            detailsContainer
         );
+        
+        return container;
     }
     
     // Helper: Build DLCs section
