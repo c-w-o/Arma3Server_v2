@@ -96,6 +96,6 @@ class FileConfig_Override(BaseModel):
 
 
 class FileConfig_Root(BaseModel):
-    config_name: str = Field(validation_alias=AliasChoices("config-name"))
+    config_name: str = Field(validation_alias=AliasChoices("config-name", "config_name"))
     defaults: FileConfig_Defaults
     configs: Dict[str, FileConfig_Override]
