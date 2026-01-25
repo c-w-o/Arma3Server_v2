@@ -269,6 +269,71 @@ def create_app(settings: Settings) -> FastAPI:
         return orch.cfg.model_dump()
 
     @app.get("/defaults")
+    def get_defaults():
+        """Return the default configuration (basis for all configs)."""
+        try:
+            # Use the same path as other endpoints
+            cfg_path = orch.layout.inst_config / "server.json"
+            if not cfg_path.exists():
+                raise HTTPException(status_code=404, detail="server.json not found")
+
+            data = load_json(cfg_path)
+            root = FileConfig_Root.model_validate(data)
+
+            def _mod_items(xs):
+                return [{"id": int(it.id), "name": it.name} for it in (xs or [])]
+
+            def _dlc_items(dlcs_obj):
+                if not dlcs_obj:
+                    return []
+                try:
+                    dlc_dump = dlcs_obj.model_dump() if hasattr(dlcs_obj, 'model_dump') else dlcs_obj.__dict__
+                except Exception:
+                    return []
+                dlc_catalog = {
+                    "contact":              "Contact",
+                    "csla_iron_curtain":    "CSLA Iron Curtain",
+                    "global_mobilization":  "Global Mobilization",
+                    "sog_prairie_fire":     "S.O.G Prairie Fire",
+                    "western_sahara":       "Western Sahara",
+                    "spearhead_1944":       "Spearhead 1944",
+                    "reaction_forces":      "Reaction Forces",
+                    "expeditionary_forces": "Expeditionary Forces",
+                }
+                items = []
+                for key, enabled in dlc_dump.items():
+                    if enabled:
+                        items.append(dlc_catalog.get(key, key))
+                return items
+
+            # Extract defaults
+            defaults_data = {
+                "mods": {},
+                "dlcs": []
+            }
+
+            # Mods categories
+            if root.defaults and root.defaults.mods:
+                defaults_data["mods"] = {
+                    "serverMods": _mod_items(getattr(root.defaults.mods, 'serverMods', None) or []),
+                    "baseMods": _mod_items(getattr(root.defaults.mods, 'baseMods', None) or []),
+                    "clientMods": _mod_items(getattr(root.defaults.mods, 'clientMods', None) or []),
+                    "maps": _mod_items(getattr(root.defaults.mods, 'maps', None) or []),
+                    "missionMods": _mod_items(getattr(root.defaults.mods, 'missionMods', None) or []),
+                }
+
+            # DLCs
+            if root.defaults and root.defaults.dlcs:
+                defaults_data["dlcs"] = _dlc_items(root.defaults.dlcs)
+
+            return {"ok": True, "defaults": defaults_data}
+        except HTTPException:
+            raise
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            print(f"Error in /defaults: {tb}")
+            raise HTTPException(status_code=500, detail=f"Error loading defaults: {str(e)}\n{tb}")
 
     @app.get("/plan")
     def plan():
