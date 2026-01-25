@@ -318,8 +318,33 @@ def save_config_override(config_path: Path, config_name: str, override: FileConf
     if config_name not in root.configs:
         raise ValueError(f"config '{config_name}' not found in server.json")
     
-    # Update the override
-    root.configs[config_name] = override
+    # MERGE with existing override instead of replacing completely
+    existing = root.configs[config_name]
+    
+    # Only update fields that are explicitly set (not None)
+    if override.description is not None:
+        existing.description = override.description
+    if override.useOCAP is not None:
+        existing.useOCAP = override.useOCAP
+    if override.numHeadless is not None:
+        existing.numHeadless = override.numHeadless
+    if override.hostname is not None:
+        existing.hostname = override.hostname
+    if override.serverPassword is not None:
+        existing.serverPassword = override.serverPassword
+    if override.dlcs is not None:
+        existing.dlcs = override.dlcs
+    if override.mods is not None:
+        existing.mods = override.mods
+    if override.customMods is not None:
+        existing.customMods = override.customMods
+    if override.params is not None:
+        existing.params = override.params
+    if override.missions is not None:
+        existing.missions = override.missions
+    
+    # Update the override with merged data
+    root.configs[config_name] = existing
     
     # Write back to file
     config_path.write_text(

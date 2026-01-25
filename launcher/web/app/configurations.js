@@ -129,6 +129,7 @@ export function createConfigurationsContent() {
             basisContent.add(
                 new UI.Heading("Basis-Konfiguration (Defaults)", { level: 4 }).setStyle({ margin: "0" }),
                 new UI.Text("Diese Einstellungen gelten für alle Konfigurationen.").setStyle({ fontSize: "0.9em", color: "var(--ui-color-text-muted)" }),
+                resp.defaults.dlcs && resp.defaults.dlcs.length > 0 ? _buildDlcsSection("Basis DLCs", resp.defaults.dlcs) : new UI.Text("Keine DLCs"),
                 _buildModsTable("Basis Mods", resp.defaults.mods)
             );
             
@@ -137,6 +138,7 @@ export function createConfigurationsContent() {
             overridesContent.add(
                 new UI.Heading("Config-spezifische Overrides", { level: 4 }).setStyle({ margin: "0" }),
                 new UI.Text(`Änderungen gegen die Basis-Konfiguration für "${configName}".`).setStyle({ fontSize: "0.9em", color: "var(--ui-color-text-muted)" }),
+                resp.overrides.dlcs && resp.overrides.dlcs.length > 0 ? _buildDlcsSection("Override DLCs", resp.overrides.dlcs) : new UI.Text("Keine DLC-Änderungen"),
                 _buildModsTable("Override Mods", resp.overrides.mods)
             );
             
@@ -145,6 +147,7 @@ export function createConfigurationsContent() {
             previewContent.add(
                 new UI.Heading("Merged Preview", { level: 4 }).setStyle({ margin: "0" }),
                 new UI.Text("Kombinierte Konfiguration (Basis + Overrides).").setStyle({ fontSize: "0.9em", color: "var(--ui-color-text-muted)" }),
+                resp.merged.dlcs && resp.merged.dlcs.length > 0 ? _buildDlcsSection("Merged DLCs", resp.merged.dlcs) : new UI.Text("Keine DLCs"),
                 _buildModsTable("Merged Mods", resp.merged.mods)
             );
             
@@ -169,24 +172,60 @@ export function createConfigurationsContent() {
         const rows = [];
         for (const [category, items] of Object.entries(modsObj)) {
             if (items && items.length > 0) {
+                const btn = new UI.Button("📋").setStyle({ 
+                    padding: "2px 8px", 
+                    fontSize: "0.8em",
+                    cursor: "pointer" 
+                });
+                btn.el.addEventListener("click", () => {
+                    const modList = items.map(m => `• ${m.name} (${m.id})`).join("\n");
+                    alert(`${category} (${items.length}):\n\n${modList}`);
+                });
+                
                 rows.push({
                     category,
                     count: items.length,
-                    details: items.map(m => `${m.name} (${m.id})`).join(", ")
+                    details: btn.el.outerHTML
                 });
             }
         }
         
+        const table = new UI.Table({
+            columns: [
+                { label: "Kategorie", key: "category" },
+                { label: "Anzahl", key: "count" },
+                { label: "", key: "details" }
+            ],
+            data: rows.length > 0 ? rows : [{ category: "(leer)", count: 0, details: "" }]
+        });
+        table.setStyle({ width: "100%", fontSize: "0.9em" });
+        
+        // Re-attach event listeners after table render
+        setTimeout(() => {
+            const buttons = table.el.querySelectorAll("button");
+            buttons.forEach((btn, idx) => {
+                if (rows[idx]) {
+                    const category = rows[idx].category;
+                    const items = modsObj[category];
+                    btn.addEventListener("click", () => {
+                        const modList = items.map(m => `• ${m.name} (${m.id})`).join("\n");
+                        alert(`${category} (${items.length}):\n\n${modList}`);
+                    });
+                }
+            });
+        }, 0);
+        
         return new UI.VDiv({ gap: 8 }).add(
             new UI.Heading("Mods", { level: 5 }).setStyle({ margin: "0 0 6px 0" }),
-            new UI.Table({
-                columns: [
-                    { label: "Kategorie", key: "category" },
-                    { label: "Anzahl", key: "count" },
-                    { label: "Details", key: "details" }
-                ],
-                data: rows.length > 0 ? rows : [{ category: "(leer)", count: 0, details: "" }]
-            }).setStyle({ width: "100%", fontSize: "0.9em" })
+            table
+        );
+    }
+    
+    // Helper: Build DLCs section
+    function _buildDlcsSection(title, dlcList) {
+        return new UI.VDiv({ gap: 8 }).add(
+            new UI.Heading("DLCs", { level: 5 }).setStyle({ margin: "0 0 6px 0" }),
+            new UI.Text(dlcList && dlcList.length > 0 ? dlcList.join(", ") : "(keine)").setStyle({ fontSize: "0.9em", color: "var(--ui-color-text-muted)" })
         );
     }
     

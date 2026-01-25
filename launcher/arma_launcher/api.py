@@ -152,6 +152,41 @@ def create_app(settings: Settings) -> FastAPI:
             def _mod_items(xs):
                 return [{"id": int(it.id), "name": it.name} for it in (xs or [])]
             
+            def _dlc_items(dlcs_obj):
+                """Extract enabled DLC names from DLC boolean object with display names."""
+                if not dlcs_obj:
+                    print(f"DEBUG: dlcs_obj is None/empty")
+                    return []
+                items = []
+                try:
+                    if hasattr(dlcs_obj, 'model_dump'):
+                        dlc_dump = dlcs_obj.model_dump()
+                    else:
+                        dlc_dump = dlcs_obj.__dict__
+                    print(f"DEBUG: dlc_dump = {dlc_dump}")
+                except Exception as e:
+                    print(f"DEBUG: Error getting dlc_dump: {e}")
+                    return []
+                
+                # Map keys to display names (same as in config_loader.py)
+                dlc_catalog = {
+                    "contact":              "Contact",
+                    "csla_iron_curtain":    "CSLA Iron Curtain",
+                    "global_mobilization":  "Global Mobilization",
+                    "sog_prairie_fire":     "S.O.G Prairie Fire",
+                    "western_sahara":       "Western Sahara",
+                    "spearhead_1944":       "Spearhead 1944",
+                    "reaction_forces":      "Reaction Forces",
+                    "expeditionary_forces": "Expeditionary Forces",
+                }
+                for key, enabled in dlc_dump.items():
+                    print(f"DEBUG: key={key}, enabled={enabled}")
+                    if enabled:
+                        display_name = dlc_catalog.get(key, key)
+                        items.append(display_name)
+                print(f"DEBUG: final dlc items = {items}")
+                return items
+            
             return {
                 "ok": True,
                 "name": config_name,
@@ -169,7 +204,8 @@ def create_app(settings: Settings) -> FastAPI:
                         "extraMaps": _mod_items(root.defaults.mods.extraMaps),
                         "extraMission": _mod_items(root.defaults.mods.extraMission),
                         "minus_mods": _mod_items(root.defaults.mods.minus_mods),
-                    }
+                    },
+                    "dlcs": _dlc_items(root.defaults.dlcs)
                 },
                 "overrides": {
                     "mods": {
@@ -184,7 +220,8 @@ def create_app(settings: Settings) -> FastAPI:
                         "extraMaps": _mod_items(override.mods.extraMaps) if override.mods else [],
                         "extraMission": _mod_items(override.mods.extraMission) if override.mods else [],
                         "minus_mods": _mod_items(override.mods.minus_mods) if override.mods else [],
-                    }
+                    },
+                    "dlcs": _dlc_items(override.dlcs) if override.dlcs else []
                 },
                 "merged": {
                     "mods": {
@@ -199,7 +236,8 @@ def create_app(settings: Settings) -> FastAPI:
                         "extraMaps": _mod_items(merged.mods.extraMaps),
                         "extraMission": _mod_items(merged.mods.extraMission),
                         "minus_mods": _mod_items(merged.mods.minus_mods),
-                    }
+                    },
+                    "dlcs": _dlc_items(merged.dlcs)
                 }
             }
         except HTTPException:
