@@ -18,6 +18,8 @@ from .log_reader import list_logs, read_tail, read_from_cursor
 from .settings import Settings
 from .orchestrator import Orchestrator
 from .steam_metadata import ModMetadataResolver, resolve_mod_ids
+from .api_variants import register_variants_routes
+from .config.file_layout import ConfigLayout
 
 class ActionResult(BaseModel):
     ok: bool
@@ -121,6 +123,8 @@ def create_app(settings: Settings) -> FastAPI:
     app_root = web_root / "app"
     kit_root = web_root / "ui-kit-0"
 
+    # Initialize Variants API for new variant-based configuration
+    config_layout = ConfigLayout(orch.layout.inst_config)
     if app_root.exists():
         app.mount("/app", NoCacheStaticFiles(directory=str(app_root), html=True), name="app")
     if kit_root.exists():
@@ -545,7 +549,10 @@ def create_app(settings: Settings) -> FastAPI:
             tb = traceback.format_exc()
             print(f"Error resolving mod IDs: {tb}")
             raise HTTPException(status_code=500, detail=f"Error resolving mod IDs: {str(e)}")
-    
+
+    # Register variant configuration API routes
+    register_variants_routes(app, settings, config_layout)
+
     return app
 
     

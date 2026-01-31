@@ -5,7 +5,7 @@ import os
 from .settings import Settings
 from .logging_setup import get_logger
 from .fs_layout import build_layout, ensure_dirs
-from .config_loader import load_config
+from .config import ConfigLayout, ConfigMerger, FileConfigStore
 from .steamcmd import SteamCMD
 from .content_manager import ContentManager
 from .cfg_generator import generate_server_cfg, generate_profile_cfg
@@ -20,12 +20,17 @@ class Orchestrator:
         self.layout = build_layout(settings)
         self.runner = ProcessRunner()
         self._cfg = None
+        
+        # ✨ NEW: Initialize config store
+        config_layout = ConfigLayout(self.layout.inst_config)
+        self.store = FileConfigStore(config_layout, ConfigMerger())
 
     @property
     def cfg(self):
         if self._cfg is None:
-            cfg_path = self.layout.inst_config / "server.json"
-            self._cfg = load_config(cfg_path)
+            # ✨ CHANGED: Use new FileConfigStore instead of monolithic load_config
+            active_name = "production"  # TODO: read from settings or db
+            self._cfg = self.store.get_merged_config(active_name)
         return self._cfg
 
     def prepare_environment(self) -> None:

@@ -1,0 +1,129 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://arma3launcher.local/schemas/mods-base.json",
+  "title": "Arma 3 Launcher - Base Mods Configuration",
+  "description": "Base mods configuration applied to all server configurations and variants",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "description",
+    "serverMods",
+    "baseMods",
+    "clientMods",
+    "maps",
+    "missionMods"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0",
+      "description": "Schema version"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of this base mod set"
+    },
+    "lastModified": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of last modification"
+    },
+    "modifiedBy": {
+      "type": "string",
+      "description": "Username or identifier of who last modified this"
+    },
+    "serverMods": {
+      "type": "array",
+      "description": "Server-only mods (not sent to clients)",
+      "items": { "$ref": "#/$defs/modEntry" }
+    },
+    "baseMods": {
+      "type": "array",
+      "description": "Base mods (loaded server + client)",
+      "items": { "$ref": "#/$defs/modEntry" }
+    },
+    "clientMods": {
+      "type": "array",
+      "description": "Client-only mods",
+      "items": { "$ref": "#/$defs/modEntry" }
+    },
+    "maps": {
+      "type": "array",
+      "description": "Map mods",
+      "items": { "$ref": "#/$defs/modEntry" }
+    },
+    "missionMods": {
+      "type": "array",
+      "description": "Mission mods",
+      "items": { "$ref": "#/$defs/modEntry" }
+    },
+    "extraServer": {
+      "type": "array",
+      "description": "Extra server category mods",
+      "items": { "$ref": "#/$defs/modEntry" },
+      "default": []
+    },
+    "extraBase": {
+      "type": "array",
+      "description": "Extra base category mods",
+      "items": { "$ref": "#/$defs/modEntry" },
+      "default": []
+    },
+    "extraClient": {
+      "type": "array",
+      "description": "Extra client category mods",
+      "items": { "$ref": "#/$defs/modEntry" },
+      "default": []
+    },
+    "extraMaps": {
+      "type": "array",
+      "description": "Extra maps category",
+      "items": { "$ref": "#/$defs/modEntry" },
+      "default": []
+    },
+    "extraMission": {
+      "type": "array",
+      "description": "Extra mission category",
+      "items": { "$ref": "#/$defs/modEntry" },
+      "default": []
+    },
+    "minus_mods": {
+      "type": "array",
+      "description": "Mods to remove/exclude",
+      "items": { "$ref": "#/$defs/modEntry" },
+      "default": []
+    }
+  },
+  "$defs": {
+    "modEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "description": "Steam Workshop ID or custom mod identifier",
+          "minimum": 1
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable mod name"
+        },
+        "version": {
+          "type": "string",
+          "description": "Mod version (informational)"
+        },
+        "required": {
+          "type": "boolean",
+          "description": "Whether this mod is required",
+          "default": false
+        },
+        "notes": {
+          "type": "string",
+          "description": "Internal notes about this mod"
+        }
+      }
+    }
+  }
+}

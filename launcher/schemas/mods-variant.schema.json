@@ -1,0 +1,190 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://arma3launcher.local/schemas/mods-variant.json",
+  "title": "Arma 3 Launcher - Variant Mods Override",
+  "description": "Mods configuration override for a specific variant (mission, scenario, event). Uses merge semantics: null/undefined = use base, array = replace, plus/minus semantics for changes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "name"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0",
+      "description": "Schema version"
+    },
+    "name": {
+      "type": "string",
+      "description": "Variant name (e.g. 'Antistasi-SOG', 'Training-Mission-Alpha')"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of this variant"
+    },
+    "lastModified": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of last modification"
+    },
+    "modifiedBy": {
+      "type": "string",
+      "description": "Username or identifier of who last modified this"
+    },
+    "serverMods": {
+      "oneOf": [
+        {
+          "type": "null",
+          "description": "null = use base configuration"
+        },
+        { "$ref": "#/$defs/modsOverride" }
+      ]
+    },
+    "baseMods": {
+      "oneOf": [
+        {
+          "type": "null",
+          "description": "null = use base configuration"
+        },
+        { "$ref": "#/$defs/modsOverride" }
+      ]
+    },
+    "clientMods": {
+      "oneOf": [
+        {
+          "type": "null",
+          "description": "null = use base configuration"
+        },
+        { "$ref": "#/$defs/modsOverride" }
+      ]
+    },
+    "maps": {
+      "oneOf": [
+        {
+          "type": "null",
+          "description": "null = use base configuration"
+        },
+        { "$ref": "#/$defs/modsOverride" }
+      ]
+    },
+    "missionMods": {
+      "oneOf": [
+        {
+          "type": "null",
+          "description": "null = use base configuration"
+        },
+        { "$ref": "#/$defs/modsOverride" }
+      ]
+    },
+    "extraServer": {
+      "oneOf": [
+        {
+          "type": "null",
+          "description": "null = use base configuration"
+        },
+        { "$ref": "#/$defs/modsOverride" }
+      ]
+    },
+    "extraBase": {
+      "oneOf": [
+        {
+          "type": "null",
+          "description": "null = use base configuration"
+        },
+        { "$ref": "#/$defs/modsOverride" }
+      ]
+    },
+    "extraClient": {
+      "oneOf": [
+        {
+          "type": "null",
+          "description": "null = use base configuration"
+        },
+        { "$ref": "#/$defs/modsOverride" }
+      ]
+    },
+    "extraMaps": {
+      "oneOf": [
+        {
+          "type": "null",
+          "description": "null = use base configuration"
+        },
+        { "$ref": "#/$defs/modsOverride" }
+      ]
+    },
+    "extraMission": {
+      "oneOf": [
+        {
+          "type": "null",
+          "description": "null = use base configuration"
+        },
+        { "$ref": "#/$defs/modsOverride" }
+      ]
+    },
+    "minus_mods": {
+      "oneOf": [
+        {
+          "type": "null",
+          "description": "null = use base configuration"
+        },
+        { "$ref": "#/$defs/modsOverride" }
+      ]
+    }
+  },
+  "$defs": {
+    "modEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "description": "Steam Workshop ID or custom mod identifier",
+          "minimum": 1
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable mod name"
+        },
+        "version": {
+          "type": "string",
+          "description": "Mod version (informational)"
+        },
+        "required": {
+          "type": "boolean",
+          "description": "Whether this mod is required",
+          "default": false
+        },
+        "notes": {
+          "type": "string",
+          "description": "Internal notes about this mod"
+        }
+      }
+    },
+    "modsOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "added": {
+          "type": "array",
+          "description": "Mods to add to the base configuration",
+          "items": { "$ref": "#/$defs/modEntry" }
+        },
+        "removed": {
+          "type": "array",
+          "description": "Mods to remove from base (by ID)",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "replace": {
+          "type": "array",
+          "description": "Complete replacement of this category (replaces entire base list)",
+          "items": { "$ref": "#/$defs/modEntry" }
+        }
+      }
+    }
+  }
+}

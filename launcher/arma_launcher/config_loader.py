@@ -50,6 +50,30 @@ def load_json(path: Path) -> Dict[str, Any]:
         raise ValueError("Config root must be an object")
     return data
 
+def save_json(path: Path, data: Dict[str, Any]) -> None:
+    """Save data to JSON file atomically (write to temp, then rename)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Convert datetime objects to ISO strings
+    def convert_datetimes(obj):
+        from datetime import datetime
+        if isinstance(obj, dict):
+            return {k: convert_datetimes(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [convert_datetimes(v) for v in obj]
+        elif isinstance(obj, datetime):
+            return obj.isoformat()
+        return obj
+    
+    converted = convert_datetimes(data)
+    
+    # Write to temporary file first
+    temp_path = path.parent / f"{path.name}.tmp"
+    temp_path.write_text(json.dumps(converted, indent=2, ensure_ascii=False), encoding="utf-8")
+    
+    # Atomic rename
+    temp_path.replace(path)
+
 def load_config(config_path: Path) -> MergedConfig:
     log.info("Loading config: %s", config_path)
     raw = load_json(config_path)

@@ -83,13 +83,17 @@ export function createConfigurationsContent() {
     tabs.addTab("merged", "Merged", previewContent);
     tabs.addTab("edit", "Edit", editContent);
     
-    // Dropdown-Change Handler: Konfiguration oder Basis laden
+    // Dropdown-Change Handler: Konfiguration, Variante oder Basis laden
     configSelect.on("change", async () => {
         const val = configSelect.getValue();
         if (val === "BASE_MODS_VIEW") {
             await loadBaseMods();
-        } else if (val) {
-            await loadConfigDetail(val, { manual: true, silent: false });
+        } else if (val && val.startsWith("variant:")) {
+            const variantName = val.substring(8);
+            await loadVariant(variantName, { manual: true, silent: false });
+        } else if (val && val.startsWith("config:")) {
+            const configName = val.substring(7);
+            await loadConfigDetail(configName, { manual: true, silent: false });
         }
     });
     
@@ -115,21 +119,38 @@ export function createConfigurationsContent() {
             if (!resp.ok) throw new Error(resp.detail || "Failed to load configs");
             
             // Build dropdown options
-            const options = [{ label: "Basis Mods", value: "BASE_MODS_VIEW" }];
-            for (const cfg of resp.configs) options.push({ label: cfg.name, value: cfg.name });
+            const options = [{ label: "─── Basis ───", value: "BASE_MODS_VIEW" }];
+            for (const cfg of resp.configs) options.push({ label: `  ${cfg.name}`, value: `config:${cfg.name}` });
+            
+            // Load variants
+            const varResp = await apiClient.getVariants();
+            if (varResp.ok && varResp.data.variants && varResp.data.variants.length > 0) {
+                options.push({ label: "─── Varianten ───", value: "SEPARATOR", disabled: true });
+                for (const variant of varResp.data.variants) {
+                    options.push({ label: `  ${variant.name}`, value: `variant:${variant.name}` });
+                }
+            }
+            
             configSelect.setOptions(options);
             
             // Auto-select: prefer previously selected
             if (selectedConfigName) {
                 configSelect.setValue(selectedConfigName);
-                if (selectedConfigName === "BASE_MODS_VIEW") await loadBaseMods();
-                else await loadConfigDetail(selectedConfigName, { manual: false, silent: true });
+                if (selectedConfigName === "BASE_MODS_VIEW") {
+                    await loadBaseMods();
+                } else if (selectedConfigName.startsWith("variant:")) {
+                    const variantName = selectedConfigName.substring(8);
+                    await loadVariant(variantName, { manual: false, silent: true });
+                } else if (selectedConfigName.startsWith("config:")) {
+                    const configName = selectedConfigName.substring(7);
+                    await loadConfigDetail(configName, { manual: false, silent: true });
+                }
             } else {
                 // Try load first config; fallback to BASE_MODS_VIEW
                 let loaded = false;
                 for (const cfg of resp.configs) {
                     const ok = await loadConfigDetail(cfg.name, { manual: false, silent: true });
-                    if (ok) { configSelect.setValue(cfg.name); loaded = true; break; }
+                    if (ok) { configSelect.setValue(`config:${cfg.name}`); loaded = true; break; }
                 }
                 if (!loaded) {
                     selectedConfigName = "BASE_MODS_VIEW";
@@ -148,12 +169,12 @@ export function createConfigurationsContent() {
     // Load config detail with defaults, overrides, merged
     async function loadConfigDetail(configName, { manual = false, silent = false } = {}) {
         try {
-            selectedConfigName = configName;
+            selectedConfigName = `config:${configName}`;
             const resp = await apiClient.getConfigDetail(configName);
             if (!resp.ok) throw new Error(resp.detail || "Failed to load config");
             
             configData = resp;
-            _markSelected(configName);
+            _markSelected(`config:${configName}`);
             
             // Clear and rebuild Basis tab
             while (basisContent.el.firstChild) basisContent.el.firstChild.remove();
@@ -308,6 +329,96 @@ export function createConfigurationsContent() {
             new UI.Heading("DLCs", { level: 5 }).setStyle({ margin: "0 0 6px 0" }),
             new UI.Text(dlcList && dlcList.length > 0 ? dlcList.join(", ") : "(keine)").setStyle({ fontSize: "0.9em", color: "var(--ui-color-text-muted)" })
         );
+    }
+    
+    // Helper: Build variant override view (shows added/removed/replace)
+    function _buildVariantOverrideView(override) {
+        const container = new UI.VDiv({ gap: 12 });
+        
+        const categories = [
+            { key: "serverMods", label: "Server Mods" },
+            { key: "baseMods", label: "Base Mods" },
+            { key: "clientMods", label: "Client Mods" },
+            { key: "maps", label: "Maps" },
+            { key: "missionMods", label: "Mission Mods" }
+        ];
+        
+        let hasOverrides = false;
+        
+        categories.forEach(cat => {
+            const catOverride = override[cat.key];
+            if (!catOverride) return;
+            
+            const added = catOverride.added || [];
+            const removed = catOverride.removed || [];
+            const replace = catOverride.replace;
+            
+            if (replace) {
+                hasOverrides = true;
+                container.add(
+                    new UI.Heading(`${cat.label} (REPLACE)`, { level: 5 }).setStyle({ 
+                        margin: "8px 0 4px 0", 
+                        color: "var(--ui-color-warning)" 
+                    }),
+                    new UI.Text(`Kompletter Ersatz mit ${replace.length} Mods`).setStyle({ fontSize: "0.9em" })
+                );
+                
+                // Show replace mods
+                const replaceDiv = new UI.VDiv({ gap: 2 });
+                replace.forEach(m => {
+                    replaceDiv.add(
+                        new UI.Text(`  • ${m.name || "N/A"} (${m.id})`).setStyle({ fontSize: "0.85em" })
+                    );
+                });
+                container.add(replaceDiv);
+            } else if (added.length > 0 || removed.length > 0) {
+                hasOverrides = true;
+                container.add(new UI.Heading(cat.label, { level: 5 }).setStyle({ margin: "8px 0 4px 0" }));
+                
+                if (added.length > 0) {
+                    const addedDiv = new UI.VDiv({ gap: 2 });
+                    addedDiv.add(
+                        new UI.Text(`➕ Hinzugefügt: ${added.length}`).setStyle({ 
+                            color: "var(--ui-color-success)", 
+                            fontSize: "0.9em",
+                            fontWeight: "bold"
+                        })
+                    );
+                    added.forEach(m => {
+                        addedDiv.add(
+                            new UI.Text(`  • ${m.name || "N/A"} (${m.id})`).setStyle({ fontSize: "0.85em" })
+                        );
+                    });
+                    container.add(addedDiv);
+                }
+                
+                if (removed.length > 0) {
+                    const removedDiv = new UI.VDiv({ gap: 2 });
+                    removedDiv.add(
+                        new UI.Text(`➖ Entfernt: ${removed.length} IDs`).setStyle({ 
+                            color: "var(--ui-color-error)", 
+                            fontSize: "0.9em",
+                            fontWeight: "bold"
+                        })
+                    );
+                    removedDiv.add(
+                        new UI.Text(`  ${removed.join(", ")}`).setStyle({ fontSize: "0.85em" })
+                    );
+                    container.add(removedDiv);
+                }
+            }
+        });
+        
+        if (!hasOverrides) {
+            container.add(
+                new UI.Text("Keine Overrides definiert").setStyle({ 
+                    fontStyle: "italic", 
+                    color: "var(--ui-color-text-muted)" 
+                })
+            );
+        }
+        
+        return container;
     }
     
     // Helper: Build Edit DLCs section with radio buttons - Grid Layout
@@ -873,6 +984,58 @@ export function createConfigurationsContent() {
             console.error("Failed to load base mods:", err);
             while (editContent.el.firstChild) editContent.el.firstChild.remove();
             editContent.add(new UI.Text(`Fehler: ${err.message}`).setStyle({ color: "red" }));
+        }
+    }
+
+    // Load variant (similar to loadConfigDetail but for variants)
+    async function loadVariant(variantName, { manual = false, silent = false } = {}) {
+        try {
+            selectedConfigName = `variant:${variantName}`;
+            const resp = await apiClient.getVariant(variantName);
+            if (!resp.ok) throw new Error(resp.detail || "Failed to load variant");
+            
+            configData = resp;
+            _markSelected(`variant:${variantName}`);
+            
+            // Clear and rebuild Basis tab (shows base mods)
+            while (basisContent.el.firstChild) basisContent.el.firstChild.remove();
+            basisContent.add(
+                new UI.Heading("Basis Mods", { level: 4 }).setStyle({ margin: "0" }),
+                new UI.Text("Diese Mods werden von allen Varianten als Basis verwendet.").setStyle({ fontSize: "0.9em", color: "var(--ui-color-text-muted)" }),
+                _buildModsTable("Basis Mods", resp.data.base)
+            );
+            
+            // Clear and rebuild Overrides tab (shows variant overrides: added/removed/replace)
+            while (overridesContent.el.firstChild) overridesContent.el.firstChild.remove();
+            overridesContent.add(
+                new UI.Heading(`Variante "${variantName}" - Overrides`, { level: 4 }).setStyle({ margin: "0" }),
+                new UI.Text("Änderungen gegen die Basis-Mods.").setStyle({ fontSize: "0.9em", color: "var(--ui-color-text-muted)" }),
+                _buildVariantOverrideView(resp.data.override)
+            );
+            
+            // Clear and rebuild Merged tab (shows merged result)
+            while (previewContent.el.firstChild) previewContent.el.firstChild.remove();
+            previewContent.add(
+                new UI.Heading("Merged Preview", { level: 4 }).setStyle({ margin: "0" }),
+                new UI.Text("Resultierende Mods nach Anwendung der Overrides.").setStyle({ fontSize: "0.9em", color: "var(--ui-color-text-muted)" }),
+                _buildModsTable("Merged Mods", resp.data.merged)
+            );
+            
+            // Clear and rebuild Edit tab
+            while (editContent.el.firstChild) editContent.el.firstChild.remove();
+            editContent.add(
+                new UI.Heading(`Edit Variante "${variantName}"`, { level: 4 }).setStyle({ margin: "0" }),
+                new UI.Text("Editor für Varianten-Overrides (in Entwicklung)").setStyle({ fontSize: "0.9em", color: "var(--ui-color-text-muted)" })
+            );
+            
+            return true;
+        } catch (err) {
+            if (!silent) {
+                console.error("Failed to load variant:", err);
+                while (basisContent.el.firstChild) basisContent.el.firstChild.remove();
+                basisContent.add(new UI.Text(`Fehler: ${err.message}`).setStyle({ color: "red" }));
+            }
+            return false;
         }
     }
 

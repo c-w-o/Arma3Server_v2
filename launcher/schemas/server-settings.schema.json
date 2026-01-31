@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://arma3launcher.local/schemas/server-settings.schema.json",
+  "title": "Arma 3 Launcher - Server Settings",
+  "description": "Server configuration settings (hostname, passwords, difficulty, etc.)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0",
+      "description": "Schema version"
+    },
+    "hostname": {
+      "type": "string",
+      "description": "Server name displayed in server browser"
+    },
+    "port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535,
+      "description": "Game port",
+      "default": 2302
+    },
+    "maxPlayers": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 127,
+      "description": "Maximum number of players",
+      "default": 64
+    },
+    "password": {
+      "type": "string",
+      "description": "Server password (empty = public)"
+    },
+    "serverCommandPassword": {
+      "type": "string",
+      "description": "Admin command password"
+    },
+    "adminPassword": {
+      "type": "string",
+      "description": "Admin login password"
+    },
+    "difficulty": {
+      "type": "string",
+      "enum": ["Recruit", "Regular", "Veteran", "Custom"],
+      "description": "Game difficulty level",
+      "default": "Regular"
+    },
+    "world": {
+      "type": "string",
+      "description": "Default world (empty, Altis, Tanoa, etc.)",
+      "default": "empty"
+    },
+    "useOCAP": {
+      "type": "boolean",
+      "description": "Enable OCAP (Operation Capture and Playback)",
+      "default": false
+    },
+    "numHeadless": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10,
+      "description": "Number of headless clients",
+      "default": 0
+    },
+    "lastModified": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of last modification"
+    },
+    "modifiedBy": {
+      "type": "string",
+      "description": "Username or identifier of who last modified this"
+    }
+  }
+}

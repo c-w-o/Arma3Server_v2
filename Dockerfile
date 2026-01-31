@@ -31,7 +31,9 @@ RUN python3 -m venv /opt/venv \
   && /opt/venv/bin/pip install --no-cache-dir \
       json5 jsonschema \
       fastapi uvicorn \
-      pydantic pydantic-settings
+      pydantic pydantic-settings \
+      pytest pytest-cov httpx \
+      python-dotenv
       
 ENV PATH="/opt/venv/bin:${PATH}"
 
