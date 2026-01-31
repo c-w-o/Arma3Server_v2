@@ -653,6 +653,59 @@ export function createConfigurationsContent() {
             editContent.add(new UI.Text(`Fehler: ${err.message}`).setStyle({ color: "red" }));
         }
     }
+
+    // Save Basis Mods
+    async function saveBaseMods() {
+        try {
+            // All fields expected by FileConfig_Mods
+            const allCategories = ["serverMods", "baseMods", "clientMods", "maps", "missionMods", 
+                                   "extraServer", "extraBase", "extraClient", "extraMaps", "extraMission", "minus_mods"];
+            const modsPayload = {};
+            
+            // Start with existing defaults.mods from configData
+            if (configData && configData.defaults && configData.defaults.mods) {
+                for (const cat of allCategories) {
+                    modsPayload[cat] = Array.isArray(configData.defaults.mods[cat]) 
+                        ? [...configData.defaults.mods[cat]] 
+                        : [];
+                }
+            } else {
+                for (const cat of allCategories) modsPayload[cat] = [];
+            }
+            
+            // Apply deletions -> remove from each category
+            for (const id of editState.modsToDelete) {
+                const asNum = Number(id);
+                for (const cat of allCategories) {
+                    modsPayload[cat] = modsPayload[cat].filter(m => Number(m.id) !== asNum);
+                }
+            }
+            
+            // Apply additions -> add to respective category
+            for (const add of editState.modsToAdd || []) {
+                const cat = add.category || "serverMods";
+                if (!Array.isArray(modsPayload[cat])) modsPayload[cat] = [];
+                const asNum = Number(add.id);
+                if (!modsPayload[cat].some(m => Number(m.id) === asNum)) {
+                    modsPayload[cat].push({ id: asNum, name: add.name || `Mod ${asNum}` });
+                }
+            }
+            
+            console.log("Saving defaults payload:", { mods: modsPayload });
+            
+            const resp = await rpcClient.post("/defaults", { mods: modsPayload });
+            if (!resp.ok) throw new Error(resp.detail || "Failed to save defaults");
+            
+            alert("Basis-Mods gespeichert!");
+            await loadBaseMods(); // Refresh
+        } catch (err) {
+            console.error("Failed to save base mods:", err);
+            if (err.data && err.data.detail) {
+                console.error("Validation errors:", JSON.stringify(err.data.detail, null, 2));
+            }
+            alert(`Fehler beim Speichern: ${err.message}`);
+        }
+    }
     
     // Save button handler
     saveBtn.el.addEventListener("click", async () => {
@@ -660,14 +713,86 @@ export function createConfigurationsContent() {
             alert("Bitte wählen Sie eine Konfiguration aus");
             return;
         }
-        
+
+        // Handle saving BASE_MODS_VIEW separately
+        if (selectedConfigName === "BASE_MODS_VIEW") {
+            await saveBaseMods();
+            return;
+        }
+
         try {
-            // For now, send back the override data as-is
-            const overridePayload = configData.overrides;
-            
+            // Build a proper override payload expected by the server (FileConfig_Override)
+            // Start from existing overrides (if any) to preserve other fields
+            const overridePayload = JSON.parse(JSON.stringify(configData.overrides || {}));
+
+            // DLC mapping: UI uses display names, server expects a boolean object
+            const normalizeDlcName = (name) => String(name ?? "")
+                .toLowerCase()
+                .replace(/\./g, "")
+                .replace(/\s+/g, " ")
+                .trim();
+
+            const dlcNameToKey = {
+                "contact": "contact",
+                "csla iron curtain": "csla_iron_curtain",
+                "global mobilization": "global_mobilization",
+                "sog prairie fire": "sog_prairie_fire",
+                "western sahara": "western_sahara",
+                "spearhead 1944": "spearhead_1944",
+                "reaction forces": "reaction_forces",
+                "expeditionary forces": "expeditionary_forces",
+            };
+
+            const dlcFields = {
+                contact: false,
+                csla_iron_curtain: false,
+                global_mobilization: false,
+                sog_prairie_fire: false,
+                western_sahara: false,
+                spearhead_1944: false,
+                reaction_forces: false,
+                expeditionary_forces: false,
+            };
+
+            if (editState.selectedDlc) {
+                const key = dlcNameToKey[normalizeDlcName(editState.selectedDlc)];
+                if (key) dlcFields[key] = true;
+            }
+
+            overridePayload.dlcs = dlcFields;
+
+            // Mods: merge edits (modsToAdd / modsToDelete) into existing override.mods
+            const modCategories = ["serverMods", "baseMods", "clientMods", "maps", "missionMods", "extraServer", "extraBase", "extraClient", "extraMaps", "extraMission", "minus_mods"];
+            const existingMods = overridePayload.mods || {};
+            for (const c of modCategories) {
+                if (!Array.isArray(existingMods[c])) existingMods[c] = [];
+            }
+
+            // Apply deletions -> add to minus_mods
+            for (const id of editState.modsToDelete) {
+                const asNum = Number(id);
+                if (!existingMods.minus_mods.some(m => Number(m.id) === asNum)) {
+                    existingMods.minus_mods.push({ id: asNum, name: `Minus ${asNum}` });
+                }
+            }
+
+            // Apply additions -> push to respective category
+            for (const add of editState.modsToAdd || []) {
+                const cat = add.category || "serverMods";
+                if (!Array.isArray(existingMods[cat])) existingMods[cat] = [];
+                const asNum = Number(add.id);
+                if (!existingMods[cat].some(m => Number(m.id) === asNum)) {
+                    existingMods[cat].push({ id: asNum, name: add.name || `Mod ${asNum}` });
+                }
+            }
+
+            overridePayload.mods = existingMods;
+
+            console.log("Saving override payload:", overridePayload);
+
             const resp = await rpcClient.post(`/config/${encodeURIComponent(selectedConfigName)}`, overridePayload);
             if (!resp.ok) throw new Error(resp.detail || "Failed to save");
-            
+
             alert("Konfiguration gespeichert!");
             await loadConfigsList(); // Refresh
         } catch (err) {

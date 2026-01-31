@@ -1,9 +1,11 @@
 from __future__ import annotations
-from fastapi import FastAPI, HTTPException, Query
+from typing import Optional
+from fastapi import FastAPI, HTTPException, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from starlette.responses import Response
+from fastapi.exceptions import RequestValidationError
+from starlette.responses import Response, JSONResponse
 from starlette.requests import Request
 from pydantic import BaseModel
 from pathlib import Path
@@ -11,7 +13,7 @@ import json
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
 from .config_loader import load_json, merge_defaults_with_override, transform_file_config_to_internal, save_config_override
-from .models_file import FileConfig_Root, FileConfig_Override
+from .models_file import FileConfig_Root, FileConfig_Override, FileConfig_Mods, FileConfig_Dlcs
 from .log_reader import list_logs, read_tail, read_from_cursor
 from .settings import Settings
 from .orchestrator import Orchestrator
@@ -20,6 +22,10 @@ class ActionResult(BaseModel):
     ok: bool
     detail: str | None = None
     data: dict | None = None
+
+class DefaultsUpdatePayload(BaseModel):
+    mods: Optional[FileConfig_Mods] = None
+    dlcs: Optional[FileConfig_Dlcs] = None
 
 class NoCacheStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope) -> Response:
@@ -42,6 +48,16 @@ def create_app(settings: Settings) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    
+    # Add validation error handler for better debugging
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(request: Request, exc: RequestValidationError):
+        print(f"[Validation Error] {request.method} {request.url.path}")
+        print(f"[Validation Error] Details: {json.dumps(exc.errors(), indent=2)}")
+        return JSONResponse(
+            status_code=422,
+            content={"detail": exc.errors(), "body": str(exc.body) if hasattr(exc, 'body') else None},
+        )
     
     orch = Orchestrator(settings)
     logs_dir = settings.arma_instance / "logs"
@@ -262,6 +278,23 @@ def create_app(settings: Settings) -> FastAPI:
             tb = traceback.format_exc()
             print(f"Error saving config: {tb}")
             raise HTTPException(status_code=500, detail=f"Error saving config: {str(e)}\n{tb}")
+
+    @app.post("/defaults", response_model=ActionResult)
+    def save_defaults_endpoint(payload: DefaultsUpdatePayload):
+        """Update the defaults (basis mods/dlcs) in server.json."""
+        try:
+            from .config_loader import save_defaults
+            cfg_path = orch.layout.inst_config / "server.json"
+            print(f"[POST /defaults] Received payload: mods={payload.mods is not None}, dlcs={payload.dlcs is not None}")
+            if payload.mods:
+                print(f"[POST /defaults] mods keys: {list(payload.mods.__dict__.keys() if hasattr(payload.mods, '__dict__') else [])}")
+            save_defaults(cfg_path, mods=payload.mods, dlcs=payload.dlcs)
+            return ActionResult(ok=True, detail="defaults saved")
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            print(f"Error saving defaults: {tb}")
+            raise HTTPException(status_code=500, detail=f"Error saving defaults: {str(e)}\n{tb}")
 
     @app.get("/config")
     def get_config():

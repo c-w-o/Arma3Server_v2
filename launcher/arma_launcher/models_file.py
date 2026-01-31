@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field, AliasChoices
+from pydantic import BaseModel, Field, AliasChoices, ConfigDict
 
 
 class FileConfig_Admin(BaseModel):
@@ -19,6 +19,7 @@ class FileConfig_CustomMods(BaseModel):
     serverMods: List[str] = Field(default_factory=list)
 
 class FileConfig_Mods(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
     serverMods: List[FileConfig_ModEntry] = Field(default_factory=list)
     baseMods: List[FileConfig_ModEntry] = Field(default_factory=list)
     clientMods: List[FileConfig_ModEntry] = Field(default_factory=list)
@@ -34,11 +35,12 @@ class FileConfig_Mods(BaseModel):
 
     minus_mods: List[FileConfig_ModEntry] = Field(
         default_factory=list,
-        validation_alias=AliasChoices("minus-mods"),
+        alias="minus-mods",
     )
 
 
 class FileConfig_Dlcs(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
     contact: bool = False
     csla_iron_curtain: bool = Field(default=False, alias="csla-iron-curtain")
     global_mobilization: bool = Field(default=False, alias="global-mobilization")

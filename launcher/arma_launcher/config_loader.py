@@ -84,7 +84,8 @@ def merge_dlcs(base: FileConfig_Dlcs, over: Optional[FileConfig_Dlcs]) -> FileCo
         log.info("merge_dlcs: over is None, returning base")
         return base
     b = base.model_dump()
-    o = over.model_dump(by_alias=True)
+    # Use field names (not aliases) so overrides actually replace base values
+    o = over.model_dump()
     log.info(f"merge_dlcs: base={b}, over={o}")
     b.update(o)  # override wins
     log.info(f"merge_dlcs: merged={b}")
@@ -352,3 +353,21 @@ def save_config_override(config_path: Path, config_name: str, override: FileConf
         encoding="utf-8"
     )
     log.info(f"Saved override for config '{config_name}'")
+
+
+def save_defaults(config_path: Path, mods: Optional[FileConfig_Mods] = None, dlcs: Optional[FileConfig_Dlcs] = None) -> None:
+    """Update only the defaults.mods and/or defaults.dlcs in server.json."""
+    raw = load_json(config_path)
+    root = FileConfig_Root.model_validate(raw)
+    
+    if mods is not None:
+        root.defaults.mods = mods
+    if dlcs is not None:
+        root.defaults.dlcs = dlcs
+    
+    # Write back to file
+    config_path.write_text(
+        json.dumps(root.model_dump(by_alias=True, exclude_none=True), indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8"
+    )
+    log.info("Saved defaults (basis mods/dlcs)")
