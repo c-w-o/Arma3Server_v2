@@ -1,0 +1,341 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "Arma3 Launcher API Schemas",
+  "description": "Central JSON Schema definitions for all API endpoints (frontend + backend)",
+
+  "$defs": {
+    "modEntry": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "integer" },
+        "name": { "type": "string" }
+      }
+    },
+    
+    "resolveMod": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "cached": { "type": "boolean" },
+        "source": { "type": "string", "enum": ["local", "steam", "fallback"] },
+        "error": { "type": "string" }
+      }
+    },
+
+    "dlcFlags": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contact",
+        "csla_iron_curtain",
+        "global_mobilization",
+        "sog_prairie_fire",
+        "western_sahara",
+        "spearhead_1944",
+        "reaction_forces",
+        "expeditionary_forces"
+      ],
+      "properties": {
+        "contact": { "type": "boolean" },
+        "csla_iron_curtain": { "type": "boolean" },
+        "global_mobilization": { "type": "boolean" },
+        "sog_prairie_fire": { "type": "boolean" },
+        "western_sahara": { "type": "boolean" },
+        "spearhead_1944": { "type": "boolean" },
+        "reaction_forces": { "type": "boolean" },
+        "expeditionary_forces": { "type": "boolean" }
+      }
+    },
+
+    "modsBlockFull": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "serverMods",
+        "baseMods",
+        "clientMods",
+        "maps",
+        "missionMods",
+        "extraServer",
+        "extraBase",
+        "extraClient",
+        "extraMaps",
+        "extraMission",
+        "minus_mods"
+      ],
+      "properties": {
+        "serverMods": { "type": "array", "items": { "$ref": "#/$defs/modEntry" } },
+        "baseMods": { "type": "array", "items": { "$ref": "#/$defs/modEntry" } },
+        "clientMods": { "type": "array", "items": { "$ref": "#/$defs/modEntry" } },
+        "maps": { "type": "array", "items": { "$ref": "#/$defs/modEntry" } },
+        "missionMods": { "type": "array", "items": { "$ref": "#/$defs/modEntry" } },
+        "extraServer": { "type": "array", "items": { "$ref": "#/$defs/modEntry" } },
+        "extraBase": { "type": "array", "items": { "$ref": "#/$defs/modEntry" } },
+        "extraClient": { "type": "array", "items": { "$ref": "#/$defs/modEntry" } },
+        "extraMaps": { "type": "array", "items": { "$ref": "#/$defs/modEntry" } },
+        "extraMission": { "type": "array", "items": { "$ref": "#/$defs/modEntry" } },
+        "minus_mods": { "type": "array", "items": { "$ref": "#/$defs/modEntry" } }
+      }
+    },
+
+    "modsBlockDefaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["serverMods", "baseMods", "clientMods", "maps", "missionMods"],
+      "properties": {
+        "serverMods": { "type": "array", "items": { "$ref": "#/$defs/modEntry" } },
+        "baseMods": { "type": "array", "items": { "$ref": "#/$defs/modEntry" } },
+        "clientMods": { "type": "array", "items": { "$ref": "#/$defs/modEntry" } },
+        "maps": { "type": "array", "items": { "$ref": "#/$defs/modEntry" } },
+        "missionMods": { "type": "array", "items": { "$ref": "#/$defs/modEntry" } }
+      }
+    },
+
+    "actionResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "detail": { "type": ["string", "null"] },
+        "data": { "type": ["object", "array", "null"] }
+      }
+    }
+  },
+
+  "properties": {
+    "ActionResult": { "$ref": "#/$defs/actionResult" },
+
+    "ConfigsResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "active", "configs"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "active": { "type": "string" },
+        "configs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "description",
+              "hostname",
+              "port",
+              "useOCAP",
+              "numHeadless",
+              "dlcs",
+              "workshop",
+              "custom"
+            ],
+            "properties": {
+              "name": { "type": "string" },
+              "description": { "type": ["string", "null"] },
+              "hostname": { "type": "string" },
+              "port": { "type": "integer" },
+              "useOCAP": { "type": "boolean" },
+              "numHeadless": { "type": "integer" },
+              "dlcs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["mount", "name", "app_id"],
+                  "properties": {
+                    "mount": { "type": "string" },
+                    "name": { "type": "string" },
+                    "app_id": { "type": "integer" }
+                  }
+                }
+              },
+              "workshop": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["mods", "maps", "servermods", "clientmods"],
+                "properties": {
+                  "mods": { "type": "array", "items": { "$ref": "#/$defs/modEntry" } },
+                  "maps": { "type": "array", "items": { "$ref": "#/$defs/modEntry" } },
+                  "servermods": { "type": "array", "items": { "$ref": "#/$defs/modEntry" } },
+                  "clientmods": { "type": "array", "items": { "$ref": "#/$defs/modEntry" } }
+                }
+              },
+              "custom": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["mods", "servermods"],
+                "properties": {
+                  "mods": { "type": "array", "items": { "type": "string" } },
+                  "servermods": { "type": "array", "items": { "type": "string" } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "ConfigDetailResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "name", "description", "defaults", "overrides", "merged"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "name": { "type": "string" },
+        "description": { "type": ["string", "null"] },
+        "defaults": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mods", "dlcs"],
+          "properties": {
+            "mods": { "$ref": "#/$defs/modsBlockFull" },
+            "dlcs": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "overrides": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mods", "dlcs"],
+          "properties": {
+            "mods": { "$ref": "#/$defs/modsBlockFull" },
+            "dlcs": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "merged": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mods", "dlcs"],
+          "properties": {
+            "mods": { "$ref": "#/$defs/modsBlockFull" },
+            "dlcs": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      }
+    },
+
+    "DefaultsGetResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "defaults"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "defaults": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mods", "dlcs"],
+          "properties": {
+            "mods": { "$ref": "#/$defs/modsBlockDefaults" },
+            "dlcs": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      }
+    },
+
+    "DefaultsUpdateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mods": { "$ref": "#/$defs/modsBlockFull" },
+        "dlcs": { "$ref": "#/$defs/dlcFlags" }
+      },
+      "anyOf": [
+        { "required": ["mods"] },
+        { "required": ["dlcs"] }
+      ]
+    },
+
+    "ConfigOverrideRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "description": { "type": "string" },
+        "useOCAP": { "type": "boolean" },
+        "numHeadless": { "type": "integer" },
+        "hostname": { "type": "string" },
+        "serverPassword": { "type": "string" },
+        "dlcs": { "$ref": "#/$defs/dlcFlags" },
+        "mods": { "$ref": "#/$defs/modsBlockFull" },
+        "customMods": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mods", "serverMods"],
+          "properties": {
+            "mods": { "type": "array", "items": { "type": "string" } },
+            "serverMods": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "params": { "type": "object" },
+        "missions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string" },
+              "autoStart": { "type": "boolean" },
+              "difficulty": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+
+    "ResolveModsRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["modIds"],
+      "properties": {
+        "modIds": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "maxItems": 100
+        }
+      }
+    },
+
+    "ResolveMod": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "cached": { "type": "boolean" },
+        "source": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    },
+
+    "ResolveModsResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "mods"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "mods": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/resolveMod" }
+        }
+      }
+    }
+  },
+
+  "type": "object",
+  "required": [
+    "ActionResult",
+    "ConfigsResponse",
+    "ConfigDetailResponse",
+    "DefaultsGetResponse",
+    "DefaultsUpdateRequest",
+    "ConfigOverrideRequest",
+    "ResolveModsRequest",
+    "ResolveModsResponse"
+  ]
+}

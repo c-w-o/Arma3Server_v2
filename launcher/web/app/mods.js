@@ -1,10 +1,5 @@
 import * as UI from "/ui-kit-0/src/ui-kit-0.js";
-
-// Create REST client instance
-const rpcClient = new UI.RestClient("", {
-    callTimeoutMs: 10000,
-    retries: 2,
-});
+import { apiClient } from "./api/client.js";
 
 export function createModsContent() {
     const container = new UI.VDiv({ gap: 12 });
@@ -69,8 +64,8 @@ export function createModsContent() {
     // Fetch configs automatically
     async function loadConfigs() {
         try {
-            // Use rpcClient to fetch configs via POST
-            const data = await rpcClient.get("/configs", {});
+            // Use centralized API client to fetch configs
+            const data = await apiClient.getConfigs();
             
             if (!data.ok) throw new Error(data.detail || "Unknown error");
             

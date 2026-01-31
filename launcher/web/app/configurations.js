@@ -1,10 +1,5 @@
 import * as UI from "/ui-kit-0/src/ui-kit-0.js";
-
-// Create REST client for API calls
-const rpcClient = new UI.RestClient("", {
-    callTimeoutMs: 10000,
-    retries: 2,
-});
+import { apiClient } from "./api/client.js";
 
 export function createConfigurationsContent() {
     const container = new UI.VDiv({ gap: 12 });
@@ -116,7 +111,7 @@ export function createConfigurationsContent() {
     // Load all configs list
     async function loadConfigsList() {
         try {
-            const resp = await rpcClient.get("/configs");
+            const resp = await apiClient.getConfigs();
             if (!resp.ok) throw new Error(resp.detail || "Failed to load configs");
             
             // Build dropdown options
@@ -154,7 +149,7 @@ export function createConfigurationsContent() {
     async function loadConfigDetail(configName, { manual = false, silent = false } = {}) {
         try {
             selectedConfigName = configName;
-            const resp = await rpcClient.get(`/config/${encodeURIComponent(configName)}`);
+            const resp = await apiClient.getConfigDetail(configName);
             if (!resp.ok) throw new Error(resp.detail || "Failed to load config");
             
             configData = resp;
@@ -401,20 +396,40 @@ export function createConfigurationsContent() {
                 new UI.Heading(categoryLabels[category], { level: 5 }).setStyle({ margin: "0 0 12px 0" })
             );
             
-            // Input-Feld mit Button links daneben
+            // Input-Feld mit Buttons (Resolve + Add)
             const inputRow = new UI.HDiv({ gap: 8, align: "stretch" });
-            
-            const addBtn = new UI.Button("Add Mods").setStyle({
-                padding: "8px 16px",
-                fontSize: "0.85em",
-                minWidth: "120px",
-                whiteSpace: "nowrap"
-            });
             
             const textarea = new UI.TextArea("", { placeholder: "IDs oder Steam-Links (eine pro Zeile)", rows: 3 });
             textarea.setStyle({ flex: "1", padding: "8px", fontFamily: "monospace", fontSize: "0.85em" });
             
-            addBtn.el.addEventListener("click", () => {
+            const btnContainer = new UI.VDiv({ gap: 4 });
+            btnContainer.setStyle({ minWidth: "120px" });
+            
+            const resolveBtn = new UI.Button("Resolve").setStyle({
+                padding: "8px 12px",
+                fontSize: "0.85em",
+                width: "100%",
+                whiteSpace: "nowrap"
+            });
+            
+            const addBtn = new UI.Button("Add Mods").setStyle({
+                padding: "8px 12px",
+                fontSize: "0.85em",
+                width: "100%",
+                whiteSpace: "nowrap"
+            });
+            
+            btnContainer.add(resolveBtn, addBtn);
+            inputRow.add(textarea, btnContainer);
+            
+            // Resolved mods display area
+            const resolvedArea = new UI.VDiv({ gap: 4 });
+            resolvedArea.setStyle({ display: "none" });
+            
+            // Store resolved mods for this category
+            let resolvedMods = {};
+            
+            resolveBtn.el.addEventListener("click", async () => {
                 const text = textarea.el.value.trim();
                 if (!text) {
                     alert("Bitte geben Sie mindestens eine Mod-ID ein");
@@ -422,24 +437,143 @@ export function createConfigurationsContent() {
                 }
                 
                 const lines = text.split("\n").map(l => l.trim()).filter(l => l.length > 0);
-                let added = 0;
+                const modIds = [];
                 for (const line of lines) {
                     const modId = _extractModId(line);
-                    if (modId) {
-                        // Speichere mit Kategorie
-                        editState.modsToAdd.push({ id: modId, name: `Mod ${modId}`, category: category });
-                        added++;
-                        console.log("Added mod to", category, ":", modId);
-                    }
+                    if (modId) modIds.push(modId);
                 }
                 
-                textarea.el.value = ""; // Clear
-                alert(`${added} Mod(s) zu ${categoryLabels[category]} hinzugefügt`);
+                if (modIds.length === 0) {
+                    alert("Keine gültigen Mod-IDs gefunden");
+                    return;
+                }
+                
+                // Show loading state
+                resolveBtn.el.disabled = true;
+                resolveBtn.setText("Resolving...");
+                resolvedArea.el.style.display = "block";
+                resolvedArea.el.innerHTML = "";
+                resolvedArea.add(new UI.Text("🔄 Resolving mod names from Steam..."));
+                
+                try {
+                    const result = await apiClient.resolveModIds(modIds);
+                    
+                    // Clear and rebuild resolved list
+                    resolvedArea.el.innerHTML = "";
+                    
+                    if (!result.ok) {
+                        resolvedArea.add(new UI.Text(`❌ Error: ${result.detail || "Unknown error"}`));
+                        return;
+                    }
+                    
+                    // Store resolved data
+                    resolvedMods = result.mods || {};
+                    
+                    const resolvedList = new UI.VDiv({ gap: 2 });
+                    resolvedList.setStyle({
+                        border: "1px solid var(--ui-color-border)",
+                        borderRadius: "var(--ui-radius-sm)",
+                        padding: "8px",
+                        background: "var(--ui-color-surface)",
+                        maxHeight: "200px",
+                        overflowY: "auto"
+                    });
+                    
+                    for (const [modId, modData] of Object.entries(resolvedMods)) {
+                        const row = new UI.HDiv({ gap: 8, align: "center" }).setStyle({
+                            padding: "4px 6px",
+                            borderBottom: "1px solid var(--ui-color-border, rgba(0,0,0,0.05))",
+                            fontSize: "0.85em"
+                        });
+                        
+                        // Status icon
+                        let statusIcon = "✓";
+                        if (modData.error) statusIcon = "⚠️";
+                        else if (modData.source === "local") statusIcon = "📁";
+                        else if (modData.source === "steam") statusIcon = "🌐";
+                        
+                        row.add(new UI.Span(statusIcon).setStyle({ minWidth: "20px" }));
+                        
+                        // Name
+                        const nameSpan = new UI.Span(modData.name).setStyle({ flex: "1" });
+                        row.add(nameSpan);
+                        
+                        // ID (small)
+                        row.add(new UI.Span(`(${modId})`).setStyle({ color: "var(--ui-color-text-muted)", fontSize: "0.8em" }));
+                        
+                        resolvedList.add(row);
+                    }
+                    
+                    resolvedArea.el.innerHTML = "";
+                    resolvedArea.add(
+                        new UI.Text("✓ Resolved - Click 'Add Mods' to add them:").setStyle({ fontSize: "0.85em", fontWeight: "bold", color: "var(--ui-color-success, green)" }),
+                        resolvedList
+                    );
+                } catch (err) {
+                    console.error("Error resolving mods:", err);
+                    resolvedArea.el.innerHTML = "";
+                    resolvedArea.add(new UI.Text(`❌ Error: ${err.message}`));
+                } finally {
+                    resolveBtn.el.disabled = false;
+                    resolveBtn.setText("Resolve");
+                }
             });
             
-            // Button links, Textarea rechts
-            inputRow.add(addBtn, textarea);
-            catContainer.add(inputRow);
+            addBtn.el.addEventListener("click", () => {
+                // Use resolved mods if available, otherwise extract from textarea
+                let added = 0;
+                
+                if (Object.keys(resolvedMods).length > 0) {
+                    // Add resolved mods with proper names
+                    for (const [modId, modData] of Object.entries(resolvedMods)) {
+                        const alreadyExists = editState.modsToAdd.some(m => String(m.id) === String(modId) && m.category === category);
+                        if (!alreadyExists) {
+                            editState.modsToAdd.push({ 
+                                id: modId, 
+                                name: modData.name || `Mod ${modId}`, 
+                                category: category 
+                            });
+                            added++;
+                            console.log("Added resolved mod to", category, ":", modId, modData.name);
+                        }
+                    }
+                    
+                    // Clear textarea and resolved area
+                    textarea.el.value = "";
+                    resolvedMods = {};
+                    resolvedArea.el.style.display = "none";
+                } else {
+                    // Fallback: extract IDs from textarea
+                    const text = textarea.el.value.trim();
+                    if (!text) {
+                        alert("Bitte geben Sie mindestens eine Mod-ID ein oder klicken Sie zuerst auf 'Resolve'");
+                        return;
+                    }
+                    
+                    const lines = text.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+                    for (const line of lines) {
+                        const modId = _extractModId(line);
+                        if (modId) {
+                            const alreadyExists = editState.modsToAdd.some(m => String(m.id) === String(modId) && m.category === category);
+                            if (!alreadyExists) {
+                                editState.modsToAdd.push({ id: modId, name: `Mod ${modId}`, category: category });
+                                added++;
+                                console.log("Added mod to", category, ":", modId);
+                            }
+                        }
+                    }
+                    textarea.el.value = "";
+                }
+                
+                if (added > 0) {
+                    updatePendingDisplay();
+                    alert(`${added} Mod(s) zu ${categoryLabels[category]} hinzugefügt`);
+                } else {
+                    alert("Keine neuen Mods hinzugefügt (evtl. bereits vorhanden)");
+                }
+            });
+            
+            catContainer.add(inputRow, resolvedArea);
             catContainer.add(new UI.VSpacer(8)); // Abstand zur Tabelle
             
             // Mods-Tabelle
@@ -585,6 +719,94 @@ export function createConfigurationsContent() {
             container.add(minusContainer);
         }
         
+        // Pending Mods Display - shows newly added mods
+        const pendingModsContainer = new UI.VDiv({ gap: 8 });
+        pendingModsContainer.setStyle({ display: "none", marginTop: "12px" });
+        
+        const updatePendingDisplay = () => {
+            // Clear pending display
+            pendingModsContainer.el.innerHTML = "";
+            
+            const pendingByCategory = {};
+            for (const mod of editState.modsToAdd) {
+                const cat = mod.category || "serverMods";
+                if (!pendingByCategory[cat]) pendingByCategory[cat] = [];
+                pendingByCategory[cat].push(mod);
+            }
+            
+            if (Object.keys(pendingByCategory).length > 0) {
+                pendingModsContainer.el.style.display = "block";
+                
+                pendingModsContainer.add(
+                    new UI.Heading("⏳ Pending Mods (not yet saved)", { level: 5 }).setStyle({ 
+                        margin: "0 0 8px 0", 
+                        color: "var(--ui-color-warning, orange)" 
+                    })
+                );
+                
+                for (const [cat, mods] of Object.entries(pendingByCategory)) {
+                    const catLabel = categoryLabels[cat] || cat;
+                    const catDiv = new UI.VDiv({ gap: 4 });
+                    catDiv.setStyle({
+                        border: "1px solid var(--ui-color-border)",
+                        borderRadius: "var(--ui-radius-sm)",
+                        padding: "8px",
+                        background: "var(--ui-color-surface)"
+                    });
+                    
+                    catDiv.add(
+                        new UI.Text(`${catLabel} (${mods.length})`).setStyle({ 
+                            fontWeight: "bold", 
+                            fontSize: "0.85em",
+                            marginBottom: "4px"
+                        })
+                    );
+                    
+                    const modsList = new UI.VDiv({ gap: 2 });
+                    for (const mod of mods) {
+                        const row = new UI.HDiv({ gap: 8, align: "center" }).setStyle({
+                            padding: "4px 6px",
+                            borderBottom: "1px solid var(--ui-color-border, rgba(0,0,0,0.05))",
+                            fontSize: "0.8em"
+                        });
+                        
+                        const nameSpan = new UI.Span(mod.name).setStyle({ flex: "1" });
+                        const idSpan = new UI.Span(`(${mod.id})`).setStyle({ 
+                            color: "var(--ui-color-text-muted)", 
+                            fontSize: "0.9em" 
+                        });
+                        
+                        // Remove button
+                        const removeBtn = new UI.Button("×").setStyle({
+                            padding: "2px 6px",
+                            fontSize: "0.9em",
+                            background: "var(--ui-color-error, #ff6b6b)",
+                            color: "white",
+                            cursor: "pointer",
+                            minWidth: "24px"
+                        });
+                        removeBtn.el.title = "Aus Pending entfernen";
+                        removeBtn.el.addEventListener("click", () => {
+                            editState.modsToAdd = editState.modsToAdd.filter(m => 
+                                !(String(m.id) === String(mod.id) && m.category === cat)
+                            );
+                            updatePendingDisplay();
+                        });
+                        
+                        row.add(nameSpan, idSpan, removeBtn);
+                        modsList.add(row);
+                    }
+                    
+                    catDiv.add(modsList);
+                    pendingModsContainer.add(catDiv);
+                }
+            } else {
+                pendingModsContainer.el.style.display = "none";
+            }
+            
+            updateSummary();
+        };
+        
         // Summary
         const summary = new UI.Text("");
         const updateSummary = () => {
@@ -598,7 +820,7 @@ export function createConfigurationsContent() {
         
         const checkSummary = setInterval(updateSummary, 500);
         updateSummary();
-        container.add(summary);
+        container.add(pendingModsContainer, summary);
         
         return container;
     }
@@ -623,7 +845,7 @@ export function createConfigurationsContent() {
     // Load Basis Mods für Bearbeitung
     async function loadBaseMods() {
         try {
-            const resp = await rpcClient.get("/defaults");
+            const resp = await apiClient.getDefaults();
             if (!resp.ok) throw new Error(resp.detail || "Failed to load defaults");
             
             selectedConfigName = "BASE_MODS_VIEW";
@@ -693,7 +915,7 @@ export function createConfigurationsContent() {
             
             console.log("Saving defaults payload:", { mods: modsPayload });
             
-            const resp = await rpcClient.post("/defaults", { mods: modsPayload });
+            const resp = await apiClient.saveDefaults({ mods: modsPayload });
             if (!resp.ok) throw new Error(resp.detail || "Failed to save defaults");
             
             alert("Basis-Mods gespeichert!");
@@ -790,7 +1012,7 @@ export function createConfigurationsContent() {
 
             console.log("Saving override payload:", overridePayload);
 
-            const resp = await rpcClient.post(`/config/${encodeURIComponent(selectedConfigName)}`, overridePayload);
+            const resp = await apiClient.saveConfig(selectedConfigName, overridePayload);
             if (!resp.ok) throw new Error(resp.detail || "Failed to save");
 
             alert("Konfiguration gespeichert!");

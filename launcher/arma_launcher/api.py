@@ -10,13 +10,14 @@ from starlette.requests import Request
 from pydantic import BaseModel
 from pathlib import Path
 import json
-from jsonschema import validate
+from jsonschema import validate, RefResolver
 from jsonschema.exceptions import ValidationError
 from .config_loader import load_json, merge_defaults_with_override, transform_file_config_to_internal, save_config_override
 from .models_file import FileConfig_Root, FileConfig_Override, FileConfig_Mods, FileConfig_Dlcs
 from .log_reader import list_logs, read_tail, read_from_cursor
 from .settings import Settings
 from .orchestrator import Orchestrator
+from .steam_metadata import ModMetadataResolver, resolve_mod_ids
 
 class ActionResult(BaseModel):
     ok: bool
@@ -35,6 +36,46 @@ class NoCacheStaticFiles(StaticFiles):
         resp.headers["Pragma"] = "no-cache"
         resp.headers["Expires"] = "0"
         return resp
+
+
+def _format_schema_error(exc: ValidationError) -> str:
+    path = "/".join([str(p) for p in exc.absolute_path]) or "(root)"
+    return f"{exc.message} at {path}"
+
+
+def _load_api_schemas():
+    """Load JSON schemas from launcher/api_schemas.json."""
+    schema_path = Path(__file__).resolve().parents[1] / "api_schemas.json"
+    if not schema_path.exists():
+        raise FileNotFoundError(f"api_schemas.json not found at {schema_path}")
+    return json.loads(schema_path.read_text(encoding="utf-8"))
+
+
+# Cache schemas on module load
+_api_schemas_cache = None
+
+def _get_api_schemas():
+    global _api_schemas_cache
+    if _api_schemas_cache is None:
+        _api_schemas_cache = _load_api_schemas()
+    return _api_schemas_cache
+
+
+def _validate_schema_payload(payload: dict, schema_key: str, *, status_code: int = 400) -> None:
+    """Validate payload against a schema from api_schemas.json."""
+    all_schemas = _get_api_schemas()
+    
+    if schema_key not in all_schemas.get("properties", {}):
+        raise HTTPException(status_code=500, detail=f"schema_not_found: {schema_key}")
+    
+    schema = all_schemas["properties"][schema_key]
+    # Provide resolver for $ref support
+    resolver = RefResolver.from_schema(all_schemas)
+    
+    try:
+        validate(instance=payload, schema=schema, resolver=resolver)
+    except ValidationError as exc:
+        raise HTTPException(status_code=status_code, detail=f"{schema_key} validation failed: {_format_schema_error(exc)}")
 
 
 
@@ -62,6 +103,15 @@ def create_app(settings: Settings) -> FastAPI:
     orch = Orchestrator(settings)
     logs_dir = settings.arma_instance / "logs"
     orch.prepare_environment()
+    
+    # Initialize mod metadata resolver with layout paths
+    mod_paths = {
+        "mods": orch.layout.mods,
+        "servermods": orch.layout.servermods,
+        "maps": orch.layout.maps,
+        "dlcs": orch.layout.dlcs,
+    }
+    mod_resolver = ModMetadataResolver(mod_paths)
     
     # --- Static UI (no build step) ---
     # Layout:
@@ -147,7 +197,9 @@ def create_app(settings: Settings) -> FastAPI:
             print(f"Config {name}: dlcs = {[d.name for d in (internal.active.dlcs or [])]}")
 
         out.sort(key=lambda x: x.get("name") or "")
-        return {"ok": True, "active": root.config_name, "configs": out}
+        response = {"ok": True, "active": root.config_name, "configs": out}
+        _validate_schema_payload(response, "ConfigsResponse", status_code=500)
+        return response
 
     @app.get("/config/{config_name}")
     def get_config_detail(config_name: str):
@@ -203,7 +255,7 @@ def create_app(settings: Settings) -> FastAPI:
                 print(f"DEBUG: final dlc items = {items}")
                 return items
             
-            return {
+            response = {
                 "ok": True,
                 "name": config_name,
                 "description": getattr(override, "description", None),
@@ -256,6 +308,8 @@ def create_app(settings: Settings) -> FastAPI:
                     "dlcs": _dlc_items(merged.dlcs)
                 }
             }
+            _validate_schema_payload(response, "ConfigDetailResponse", status_code=500)
+            return response
         except HTTPException:
             raise
         except Exception as e:
@@ -268,9 +322,16 @@ def create_app(settings: Settings) -> FastAPI:
     def save_config(config_name: str, override_data: FileConfig_Override):
         """Save a configuration override."""
         try:
+            _validate_schema_payload(
+                override_data.model_dump(exclude_none=True),
+                "ConfigOverrideRequest",
+                status_code=422,
+            )
             cfg_path = orch.layout.inst_config / "server.json"
             save_config_override(cfg_path, config_name, override_data)
-            return ActionResult(ok=True, detail=f"config '{config_name}' saved")
+            response = ActionResult(ok=True, detail=f"config '{config_name}' saved")
+            _validate_schema_payload(response.model_dump(), "ActionResult", status_code=500)
+            return response
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
         except Exception as e:
@@ -288,8 +349,15 @@ def create_app(settings: Settings) -> FastAPI:
             print(f"[POST /defaults] Received payload: mods={payload.mods is not None}, dlcs={payload.dlcs is not None}")
             if payload.mods:
                 print(f"[POST /defaults] mods keys: {list(payload.mods.__dict__.keys() if hasattr(payload.mods, '__dict__') else [])}")
+            _validate_schema_payload(
+                payload.model_dump(exclude_none=True),
+                "DefaultsUpdateRequest",
+                status_code=422,
+            )
             save_defaults(cfg_path, mods=payload.mods, dlcs=payload.dlcs)
-            return ActionResult(ok=True, detail="defaults saved")
+            response = ActionResult(ok=True, detail="defaults saved")
+            _validate_schema_payload(response.model_dump(), "ActionResult", status_code=500)
+            return response
         except Exception as e:
             import traceback
             tb = traceback.format_exc()
@@ -359,7 +427,9 @@ def create_app(settings: Settings) -> FastAPI:
             if root.defaults and root.defaults.dlcs:
                 defaults_data["dlcs"] = _dlc_items(root.defaults.dlcs)
 
-            return {"ok": True, "defaults": defaults_data}
+            response = {"ok": True, "defaults": defaults_data}
+            _validate_schema_payload(response, "DefaultsGetResponse", status_code=500)
+            return response
         except HTTPException:
             raise
         except Exception as e:
@@ -442,6 +512,40 @@ def create_app(settings: Settings) -> FastAPI:
             "entries": [{"n": i + 1, "line": line} for i, line in enumerate(chunk.entries)],
             "truncated": chunk.truncated,
         }
+
+    @app.post("/resolve-mod-ids")
+    def resolve_mod_ids_endpoint(payload: dict = Body(...)):
+        """Resolve mod IDs to names via local .modmeta.json or Steam API."""
+        try:
+            print(f"[DEBUG] resolve-mod-ids called with payload: {payload}")
+            _validate_schema_payload(payload, "ResolveModsRequest", status_code=422)
+            
+            mod_ids = payload.get("modIds", [])
+            print(f"[DEBUG] Extracted mod_ids: {mod_ids}")
+            if not mod_ids or len(mod_ids) == 0:
+                raise HTTPException(status_code=400, detail="modIds is required and must not be empty")
+            
+            print(f"[DEBUG] Calling resolve_mod_ids with resolver: {mod_resolver}")
+            # Run resolution (checks local .modmeta.json first, then Steam API)
+            results = resolve_mod_ids(mod_ids, mod_resolver)
+            print(f"[DEBUG] Got results: {results}")
+            
+            response = {
+                "ok": True,
+                "mods": results
+            }
+            print(f"[DEBUG] Validating response schema...")
+            _validate_schema_payload(response, "ResolveModsResponse", status_code=500)
+            print(f"[DEBUG] Response validated, returning")
+            return response
+        except HTTPException:
+            raise
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            print(f"Error resolving mod IDs: {tb}")
+            raise HTTPException(status_code=500, detail=f"Error resolving mod IDs: {str(e)}")
+    
     return app
 
     
