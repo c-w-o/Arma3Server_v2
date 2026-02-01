@@ -21,9 +21,10 @@ class Orchestrator:
         self.runner = ProcessRunner()
         self._cfg = None
         
-        # ✨ NEW: Initialize config store
+        # ✨ NEW: Initialize config store and merger
         config_layout = ConfigLayout(self.layout.inst_config)
-        self.store = FileConfigStore(config_layout, ConfigMerger())
+        self.merger = ConfigMerger()
+        self.store = FileConfigStore(config_layout, self.merger)
 
     @property
     def cfg(self):

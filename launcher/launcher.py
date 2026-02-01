@@ -21,17 +21,16 @@ import sys
 
 
 def _main() -> int:
-    # If no CLI args are given, allow env-driven mode selection.
+    # If no CLI args are given (only script name), allow env-driven mode selection.
     # This is useful for Docker ENTRYPOINT usage.
     if len(sys.argv) == 1:
-        mode = os.environ.get("LAUNCHER_MODE", "dbg").strip().lower()
+        mode = os.environ.get("LAUNCHER_MODE", "api").strip().lower()
         if mode not in ("run", "api", "plan"):
-            mode = "run"
-            sys.argv = [sys.argv[0], "api", "--host", "0.0.0.0", "--port", "8000"]
-        else:
-            sys.argv = [sys.argv[0], mode]
+            mode = "api"
+        sys.argv = [sys.argv[0], mode, "--host", "0.0.0.0", "--port", "8000"]
 
     # Delegate to the actual launcher CLI inside the package
+    # Pass only argv[1:] to skip the script name
     from arma_launcher.cli import main as pkg_main
     return int(pkg_main(sys.argv[1:]))
 

@@ -59,7 +59,15 @@ export function createConfigurationsContent() {
     // Config-Auswahl (Dropdown) links von den Tabs platzieren
     const configSelect = new UI.Select({ options: [], value: "" });
     configSelect.setStyle({ minWidth: "220px" });
-    tabs.group.bar.add(configSelect);
+
+    // Neue Konfiguration Button
+    const createConfigBtn = new UI.Button("➕ Neu").setStyle({
+        padding: "6px 10px",
+        fontSize: "0.85em",
+        whiteSpace: "nowrap"
+    });
+
+    tabs.group.bar.add(configSelect, createConfigBtn);
     
     // Placeholder content (wird später gefüllt)
     const basisContent = new UI.VDiv({ gap: 8 }).add(
@@ -111,6 +119,46 @@ export function createConfigurationsContent() {
     );
     
     // === API Integration ===
+
+    async function createNewConfig() {
+        try {
+            const rawName = prompt("Name der neuen Konfiguration:");
+            if (rawName === null) return; // user cancelled
+            const name = String(rawName || "").trim();
+            if (!name) {
+                alert("Bitte einen gültigen Namen eingeben");
+                return;
+            }
+            if (/[\\/]/.test(name)) {
+                alert("Der Name darf keine Slash-Zeichen enthalten");
+                return;
+            }
+
+            const rawDesc = prompt("Beschreibung (optional):") ?? "";
+            const description = String(rawDesc || "").trim();
+
+            // Prevent duplicates
+            const existing = await apiClient.getConfigs();
+            if (existing.ok && Array.isArray(existing.configs)) {
+                const names = existing.configs.map(c => c.name);
+                if (names.includes(name)) {
+                    alert(`Konfiguration "${name}" existiert bereits`);
+                    return;
+                }
+            }
+
+            // Create minimal override (description optional)
+            const payload = description ? { description } : {};
+            const resp = await apiClient.saveConfig(name, payload);
+            if (!resp.ok) throw new Error(resp.detail || "Fehler beim Erstellen");
+
+            selectedConfigName = `config:${name}`;
+            await loadConfigsList();
+        } catch (err) {
+            console.error("Failed to create config:", err);
+            alert(`Fehler beim Erstellen: ${err.message}`);
+        }
+    }
     
     // Load all configs list
     async function loadConfigsList() {
@@ -165,6 +213,8 @@ export function createConfigurationsContent() {
             previewContent.add(new UI.Text(`Fehler: ${err.message}`));
         }
     }
+
+    createConfigBtn.el.addEventListener("click", createNewConfig);
     
     // Load config detail with defaults, overrides, merged
     async function loadConfigDetail(configName, { manual = false, silent = false } = {}) {
@@ -439,8 +489,17 @@ export function createConfigurationsContent() {
             "Expeditionary Forces"
         ];
         
-        // RadioGroup erstellen
-        const initialValue = currentDlc ? currentDlc : "Keine";
+        // RadioGroup erstellen (normalisierte Auswahl)
+        const normalize = (val) => String(val || "")
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "");
+
+        let initialValue = "Keine";
+        if (currentDlc) {
+            const norm = normalize(currentDlc);
+            const match = allDlcs.find(d => normalize(d) === norm);
+            initialValue = match || currentDlc;
+        }
         const radioGroup = new UI.RadioGroup({
             name: "dlc-selection",
             options: allDlcs,

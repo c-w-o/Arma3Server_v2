@@ -54,7 +54,7 @@ class FileConfig_Dlcs(BaseModel):
     )
     sog_prairie_fire: bool = Field(
         default=False,
-        validation_alias=AliasChoices("s.o.g-prairie-fire", "s.o.g_prairie_fire"),
+        validation_alias=AliasChoices("s.o.g-prairie-fire", "s.o.g_prairie_fire", "sog-prairie-fire", "sog_prairie_fire"),
         serialization_alias="s.o.g-prairie-fire",
     )
     western_sahara: bool = Field(

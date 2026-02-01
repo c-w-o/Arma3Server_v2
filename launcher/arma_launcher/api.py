@@ -146,23 +146,10 @@ def create_app(settings: Settings) -> FastAPI:
     def list_configs():
         """List all available configuration variants and their merged mods/DLCs."""
         try:
-            cfg_path = orch.layout.inst_config / "server.json"
-            raw = load_json(cfg_path)
-
-            # Validate schema (same as config_loader.load_config)
-            # Temporarily skip schema validation to debug
-            # schema_path = Path(__file__).resolve().parents[1] / "server_schema.json"
-            # schema = json.loads(schema_path.read_text(encoding="utf-8"))
-            # try:
-            #     validate(instance=raw, schema=schema)
-            # except ValidationError as e:
-            #     import traceback
-            #     err_detail = f"config_schema_invalid: {e.message}\nPath: {e.path}\nSchema: {e.schema}"
-            #     print(f"Schema validation error: {err_detail}")
-            #     traceback.print_exc()
-            #     raise HTTPException(status_code=400, detail=err_detail)
-
-            root = FileConfig_Root.model_validate(raw)
+            # Use new multi-file structure
+            config_names = orch.store.list_configs()
+            active_config = orch.store.get_active_config()
+            defaults = orch.store.load_defaults()
         except HTTPException:
             raise
         except Exception as e:
@@ -172,8 +159,9 @@ def create_app(settings: Settings) -> FastAPI:
             raise HTTPException(status_code=500, detail=f"Error loading configs: {str(e)}\n{tb}")
 
         out = []
-        for name, over in (root.configs or {}).items():
-            merged = merge_defaults_with_override(root.defaults, over)
+        for name in config_names:
+            override = orch.store.load_override(name)
+            merged = orch.merger.merge(defaults, override)
             internal = transform_file_config_to_internal(name, merged)
 
             def _items(xs):
@@ -181,7 +169,7 @@ def create_app(settings: Settings) -> FastAPI:
 
             out.append({
                 "name": name,
-                "description": getattr(over, "description", None),
+                "description": getattr(override, "description", None),
                 "hostname": internal.server.hostname,
                 "port": internal.server.port,
                 "useOCAP": bool(internal.active.ocap.enabled),
@@ -201,7 +189,7 @@ def create_app(settings: Settings) -> FastAPI:
             print(f"Config {name}: dlcs = {[d.name for d in (internal.active.dlcs or [])]}")
 
         out.sort(key=lambda x: x.get("name") or "")
-        response = {"ok": True, "active": root.config_name, "configs": out}
+        response = {"ok": True, "active": active_config, "configs": out}
         _validate_schema_payload(response, "ConfigsResponse", status_code=500)
         return response
 
@@ -209,17 +197,13 @@ def create_app(settings: Settings) -> FastAPI:
     def get_config_detail(config_name: str):
         """Get specific configuration with defaults, overrides, and merged view."""
         try:
-            cfg_path = orch.layout.inst_config / "server.json"
-            raw = load_json(cfg_path)
-            
-            # Temporarily skip schema validation
-            root = FileConfig_Root.model_validate(raw)
-            
-            if config_name not in root.configs:
+            # Use new multi-file structure
+            if config_name not in orch.store.list_configs():
                 raise HTTPException(status_code=404, detail=f"config '{config_name}' not found")
             
-            override = root.configs[config_name]
-            merged = merge_defaults_with_override(root.defaults, override)
+            defaults = orch.store.load_defaults()
+            override = orch.store.load_override(config_name)
+            merged = orch.merger.merge(defaults, override)
             
             def _mod_items(xs):
                 return [{"id": int(it.id), "name": it.name} for it in (xs or [])]
@@ -265,19 +249,19 @@ def create_app(settings: Settings) -> FastAPI:
                 "description": getattr(override, "description", None),
                 "defaults": {
                     "mods": {
-                        "serverMods": _mod_items(root.defaults.mods.serverMods),
-                        "baseMods": _mod_items(root.defaults.mods.baseMods),
-                        "clientMods": _mod_items(root.defaults.mods.clientMods),
-                        "maps": _mod_items(root.defaults.mods.maps),
-                        "missionMods": _mod_items(root.defaults.mods.missionMods),
-                        "extraServer": _mod_items(root.defaults.mods.extraServer),
-                        "extraBase": _mod_items(root.defaults.mods.extraBase),
-                        "extraClient": _mod_items(root.defaults.mods.extraClient),
-                        "extraMaps": _mod_items(root.defaults.mods.extraMaps),
-                        "extraMission": _mod_items(root.defaults.mods.extraMission),
-                        "minus_mods": _mod_items(root.defaults.mods.minus_mods),
+                        "serverMods": _mod_items(defaults.mods.serverMods),
+                        "baseMods": _mod_items(defaults.mods.baseMods),
+                        "clientMods": _mod_items(defaults.mods.clientMods),
+                        "maps": _mod_items(defaults.mods.maps),
+                        "missionMods": _mod_items(defaults.mods.missionMods),
+                        "extraServer": _mod_items(defaults.mods.extraServer),
+                        "extraBase": _mod_items(defaults.mods.extraBase),
+                        "extraClient": _mod_items(defaults.mods.extraClient),
+                        "extraMaps": _mod_items(defaults.mods.extraMaps),
+                        "extraMission": _mod_items(defaults.mods.extraMission),
+                        "minus_mods": _mod_items(defaults.mods.minus_mods),
                     },
-                    "dlcs": _dlc_items(root.defaults.dlcs)
+                    "dlcs": _dlc_items(defaults.dlcs)
                 },
                 "overrides": {
                     "mods": {
@@ -324,16 +308,16 @@ def create_app(settings: Settings) -> FastAPI:
 
     @app.post("/config/{config_name}")
     def save_config(config_name: str, override_data: FileConfig_Override):
-        """Save a configuration override."""
+        """Save a configuration override using multi-file structure."""
         try:
             _validate_schema_payload(
                 override_data.model_dump(exclude_none=True),
                 "ConfigOverrideRequest",
                 status_code=422,
             )
-            cfg_path = orch.layout.inst_config / "server.json"
-            save_config_override(cfg_path, config_name, override_data)
-            response = ActionResult(ok=True, detail=f"config '{config_name}' saved")
+            # Use new multi-file storage
+            orch.store.save_override(config_name, override_data, modified_by="api")
+            response = ActionResult(ok=True, detail=f"config '{config_name}' saved to multi-file structure")
             _validate_schema_payload(response.model_dump(), "ActionResult", status_code=500)
             return response
         except ValueError as e:
@@ -346,10 +330,8 @@ def create_app(settings: Settings) -> FastAPI:
 
     @app.post("/defaults", response_model=ActionResult)
     def save_defaults_endpoint(payload: DefaultsUpdatePayload):
-        """Update the defaults (basis mods/dlcs) in server.json."""
+        """Update the defaults (basis mods/dlcs) using multi-file structure."""
         try:
-            from .config_loader import save_defaults
-            cfg_path = orch.layout.inst_config / "server.json"
             print(f"[POST /defaults] Received payload: mods={payload.mods is not None}, dlcs={payload.dlcs is not None}")
             if payload.mods:
                 print(f"[POST /defaults] mods keys: {list(payload.mods.__dict__.keys() if hasattr(payload.mods, '__dict__') else [])}")
@@ -358,8 +340,9 @@ def create_app(settings: Settings) -> FastAPI:
                 "DefaultsUpdateRequest",
                 status_code=422,
             )
-            save_defaults(cfg_path, mods=payload.mods, dlcs=payload.dlcs)
-            response = ActionResult(ok=True, detail="defaults saved")
+            # Use new multi-file storage
+            orch.store.save_defaults(mods=payload.mods, dlcs=payload.dlcs)
+            response = ActionResult(ok=True, detail="defaults saved to multi-file structure")
             _validate_schema_payload(response.model_dump(), "ActionResult", status_code=500)
             return response
         except Exception as e:
@@ -375,15 +358,10 @@ def create_app(settings: Settings) -> FastAPI:
 
     @app.get("/defaults")
     def get_defaults():
-        """Return the default configuration (basis for all configs)."""
+        """Return the default configuration from multi-file structure."""
         try:
-            # Use the same path as other endpoints
-            cfg_path = orch.layout.inst_config / "server.json"
-            if not cfg_path.exists():
-                raise HTTPException(status_code=404, detail="server.json not found")
-
-            data = load_json(cfg_path)
-            root = FileConfig_Root.model_validate(data)
+            # Load defaults from new multi-file structure
+            defaults = orch.store.load_defaults()
 
             def _mod_items(xs):
                 return [{"id": int(it.id), "name": it.name} for it in (xs or [])]
@@ -411,25 +389,18 @@ def create_app(settings: Settings) -> FastAPI:
                         items.append(dlc_catalog.get(key, key))
                 return items
 
-            # Extract defaults
-            defaults_data = {
-                "mods": {},
-                "dlcs": []
+            # Mods categories from defaults
+            defaults_data = {"mods": {}, "dlcs": []}
+            defaults_data["mods"] = {
+                "serverMods": _mod_items(getattr(defaults.mods, 'serverMods', None) or []),
+                "baseMods": _mod_items(getattr(defaults.mods, 'baseMods', None) or []),
+                "clientMods": _mod_items(getattr(defaults.mods, 'clientMods', None) or []),
+                "maps": _mod_items(getattr(defaults.mods, 'maps', None) or []),
+                "missionMods": _mod_items(getattr(defaults.mods, 'missionMods', None) or []),
             }
 
-            # Mods categories
-            if root.defaults and root.defaults.mods:
-                defaults_data["mods"] = {
-                    "serverMods": _mod_items(getattr(root.defaults.mods, 'serverMods', None) or []),
-                    "baseMods": _mod_items(getattr(root.defaults.mods, 'baseMods', None) or []),
-                    "clientMods": _mod_items(getattr(root.defaults.mods, 'clientMods', None) or []),
-                    "maps": _mod_items(getattr(root.defaults.mods, 'maps', None) or []),
-                    "missionMods": _mod_items(getattr(root.defaults.mods, 'missionMods', None) or []),
-                }
-
             # DLCs
-            if root.defaults and root.defaults.dlcs:
-                defaults_data["dlcs"] = _dlc_items(root.defaults.dlcs)
+            defaults_data["dlcs"] = _dlc_items(defaults.dlcs)
 
             response = {"ok": True, "defaults": defaults_data}
             _validate_schema_payload(response, "DefaultsGetResponse", status_code=500)
