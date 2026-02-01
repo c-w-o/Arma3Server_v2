@@ -1,200 +1,338 @@
 import * as UI from "/ui-kit-0/src/ui-kit-0.js";
+import { apiClient } from "./api/client.js";
 
 export function createDashboardContent() {
     const container = new UI.VDiv({ gap: 16 });
     
-    // ===== Quick Actions =====
-    const quickActionsDiv = new UI.VDiv({ gap: 8 });
-    quickActionsDiv.add(
-        new UI.Heading("Quick Actions", { level: 4 }).setStyle({ margin: "0" }),
-        new UI.HDiv({ gap: 8, align: "center" }).add(
-            new UI.Span("Aktive Config:").setStyle({ fontWeight: "600" }),
-            new UI.Select({ placeholder: "Wähle Konfiguration..." }).setStyle({ flex: "1", maxWidth: "300px" }),
-            new UI.Button("Start").setStyle({ padding: "8px 16px" }),
-            new UI.Button("Stop").setStyle({ padding: "8px 16px" }),
-            new UI.Button("Restart").setStyle({ padding: "8px 16px" })
-        )
+    // State
+    let selectedConfig = null;
+    let selectedMission = null;
+    let allConfigs = [];
+    let missions = [];
+    
+    // ===== Header =====
+    container.add(
+        new UI.Heading("Dashboard", { level: 2 }).setStyle({ margin: "0 0 16px 0" })
     );
-    quickActionsDiv.setStyle({
+    
+    // ===== Config Selection Section =====
+    const configSection = new UI.VDiv({ gap: 12 });
+    configSection.setStyle({
         background: "var(--ui-color-surface)",
         border: "1px solid var(--ui-color-border)",
         borderRadius: "var(--ui-radius-md)",
-        padding: "12px"
+        padding: "16px"
     });
-    container.add(quickActionsDiv);
     
-    // ===== Summary Cards (2x2 Grid) =====
-    const summaryGrid = new UI.HDiv({ gap: 12 });
-    summaryGrid.setStyle({ display: "flex", flexWrap: "wrap" });
+    configSection.add(
+        new UI.Heading("1. Konfiguration auswählen", { level: 4 }).setStyle({ margin: "0 0 8px 0" })
+    );
     
-    const summaryCard = (title, content, icon = "📊") => {
-        const card = new UI.VDiv({ gap: 6 });
-        card.setStyle({
-            flex: "1 1 calc(50% - 6px)",
-            minWidth: "250px",
-            background: "var(--ui-color-surface)",
-            border: "1px solid var(--ui-color-border)",
-            borderRadius: "var(--ui-radius-md)",
-            padding: "12px"
+    const configSelect = new UI.Select({ options: [], value: "" });
+    configSelect.setStyle({ minWidth: "300px" });
+    
+    configSelect.on("change", async () => {
+        selectedConfig = configSelect.getValue();
+        selectedMission = null;
+        missionList.el.innerHTML = "";
+        detailsSection.setStyle({ display: "none" });
+        
+        if (selectedConfig) {
+            await loadMissionsForConfig(selectedConfig);
+            missionSection.setStyle({ display: "block" });
+        } else {
+            missionSection.setStyle({ display: "none" });
+        }
+    });
+    
+    configSection.add(configSelect);
+    container.add(configSection);
+    
+    // ===== Missions Section =====
+    const missionSection = new UI.VDiv({ gap: 12 });
+    missionSection.setStyle({
+        background: "var(--ui-color-surface)",
+        border: "1px solid var(--ui-color-border)",
+        borderRadius: "var(--ui-radius-md)",
+        padding: "16px",
+        display: "none"
+    });
+    
+    missionSection.add(
+        new UI.Heading("2. Mission auswählen", { level: 4 }).setStyle({ margin: "0 0 12px 0" })
+    );
+    
+    const missionList = new UI.VDiv({ gap: 8 });
+    missionList.setStyle({
+        maxHeight: "400px",
+        overflowY: "auto"
+    });
+    
+    missionSection.add(missionList);
+    container.add(missionSection);
+    
+    // ===== Mission Details Section =====
+    const detailsSection = new UI.VDiv({ gap: 12 });
+    detailsSection.setStyle({
+        background: "var(--ui-color-surface)",
+        border: "2px solid var(--ui-color-nav-active)",
+        borderRadius: "var(--ui-radius-md)",
+        padding: "16px",
+        display: "none"
+    });
+    
+    const missionTitle = new UI.Heading("", { level: 4 }).setStyle({ margin: "0 0 8px 0" });
+    const missionDesc = new UI.Text("");
+    const requiredModsList = new UI.VDiv({ gap: 4 });
+    const uploadArea = new UI.VDiv({ gap: 8 });
+    
+    const startBtn = new UI.Button("✓ Starten").setStyle({ 
+        padding: "10px 20px", 
+        background: "var(--ui-color-success, #4CAF50)",
+        color: "white",
+        cursor: "pointer"
+    });
+    
+    const cancelBtn = new UI.Button("Abbrechen").setStyle({ 
+        padding: "10px 20px",
+        background: "var(--ui-color-surface)",
+        cursor: "pointer"
+    });
+    
+    cancelBtn.el.addEventListener("click", () => {
+        selectedMission = null;
+        detailsSection.setStyle({ display: "none" });
+        displayMissionsList();
+    });
+    
+    startBtn.el.addEventListener("click", () => {
+        alert(`Würde starten:\nConfig: ${selectedConfig}\nMission: ${selectedMission}`);
+    });
+    
+    detailsSection.add(
+        missionTitle,
+        missionDesc,
+        new UI.Heading("Benötigte Mods", { level: 5 }).setStyle({ margin: "8px 0 4px 0" }),
+        requiredModsList,
+        new UI.Heading("Custom Mods", { level: 5 }).setStyle({ margin: "16px 0 8px 0" }),
+        uploadArea,
+        new UI.HDiv({ gap: 8, align: "center" }).add(startBtn, cancelBtn)
+    );
+    
+    container.add(detailsSection);
+    
+    // ===== API Integration =====
+    
+    async function loadConfigs() {
+        try {
+            const resp = await apiClient.getConfigs();
+            if (!resp.ok) throw new Error(resp.detail);
+            
+            allConfigs = resp.configs;
+            const options = [{ label: "-- Wähle eine Konfiguration --", value: "" }];
+            for (const cfg of resp.configs) {
+                options.push({
+                    label: `${cfg.name} (${cfg.hostname}:${cfg.port})`,
+                    value: cfg.name
+                });
+            }
+            
+            configSelect.setOptions(options);
+        } catch (err) {
+            console.error("Failed to load configs:", err);
+            configSelect.setOptions([
+                { label: `❌ Fehler: ${err.message}`, value: "" }
+            ]);
+        }
+    }
+    
+    async function loadMissionsForConfig(configName) {
+        try {
+            // For now: Mock mission data
+            // Later: fetch from /api/missions or extract from config
+            missions = [
+                {
+                    name: "Antistasi",
+                    description: "Insurgency-style campaign against occupation",
+                    requiredMods: [
+                        { id: 843577117, name: "RHS USAF" },
+                        { id: 450814997, name: "CBA_A3" }
+                    ]
+                },
+                {
+                    name: "Combat Patrol",
+                    description: "Cooperative tactical missions",
+                    requiredMods: [
+                        { id: 450814997, name: "CBA_A3" }
+                    ]
+                },
+                {
+                    name: "Liberation",
+                    description: "RTS-style campaign",
+                    requiredMods: [
+                        { id: 843577117, name: "RHS USAF" },
+                        { id: 843425103, name: "RHS AFRF" }
+                    ]
+                }
+            ];
+            
+            displayMissionsList();
+        } catch (err) {
+            console.error("Failed to load missions:", err);
+            missionList.el.innerHTML = "";
+            missionList.add(
+                new UI.Text(`❌ Fehler beim Laden der Missionen: ${err.message}`)
+                    .setStyle({ color: "var(--ui-color-error)" })
+            );
+        }
+    }
+    
+    function displayMissionsList() {
+        missionList.el.innerHTML = "";
+        
+        if (missions.length === 0) {
+            missionList.add(
+                new UI.Text("Keine Missionen verfügbar").setStyle({ 
+                    color: "var(--ui-color-text-muted)", 
+                    fontStyle: "italic" 
+                })
+            );
+            return;
+        }
+        
+        missions.forEach(mission => {
+            const configMods = allConfigs.find(c => c.name === selectedConfig)?.workshop?.mods || [];
+            const compatible = mission.requiredMods.every(m => configMods.some(c => c.id === m.id));
+            
+            const missionCard = new UI.HDiv({ gap: 12, align: "center" });
+            missionCard.setStyle({
+                border: `2px solid ${compatible ? "var(--ui-color-success, #4CAF50)" : "var(--ui-color-warning, #FF9800)"}`,
+                borderRadius: "var(--ui-radius-md)",
+                padding: "12px",
+                cursor: "pointer",
+                background: selectedMission === mission.name ? "var(--ui-color-nav-active)" : "var(--ui-color-bg)",
+                transition: "all 0.2s"
+            });
+            
+            // Status icon
+            const statusIcon = compatible 
+                ? new UI.Span("✓")
+                    .setStyle({ fontSize: "1.2em", color: "var(--ui-color-success, #4CAF50)", minWidth: "20px" })
+                : new UI.Span("⚠")
+                    .setStyle({ fontSize: "1.2em", color: "var(--ui-color-warning, #FF9800)", minWidth: "20px" });
+            
+            // Mission info
+            const infoDiv = new UI.VDiv({ gap: 2 }).setStyle({ flex: "1" });
+            infoDiv.add(
+                new UI.Heading(mission.name, { level: 5 }).setStyle({ margin: "0" }),
+                new UI.Text(mission.description).setStyle({ 
+                    fontSize: "0.85em", 
+                    color: "var(--ui-color-text-muted)" 
+                }),
+                new UI.Text(`${mission.requiredMods.length} benötigte Mods`).setStyle({ 
+                    fontSize: "0.8em", 
+                    color: compatible 
+                        ? "var(--ui-color-text-muted)" 
+                        : "var(--ui-color-warning, #FF9800)",
+                    fontWeight: compatible ? "normal" : "bold"
+                })
+            );
+            
+            missionCard.add(statusIcon, infoDiv);
+            
+            missionCard.el.addEventListener("click", () => {
+                selectedMission = mission.name;
+                displayMissionsList();
+                displayMissionDetails(mission);
+                detailsSection.setStyle({ display: "block" });
+            });
+            
+            missionList.add(missionCard);
         });
-        card.add(
-            new UI.HDiv({ gap: 8, align: "center" }).add(
-                new UI.Span(icon).setStyle({ fontSize: "1.5em" }),
-                new UI.Heading(title, { level: 4 }).setStyle({ margin: "0" })
-            ),
-            content
-        );
-        return card;
-    };
+    }
     
-    // Active Profile Card
-    const profileContent = new UI.VDiv({ gap: 4 }).add(
-        new UI.Text("Profile: Production").setStyle({ fontWeight: "600" }),
-        new UI.Text("Basis: Arma3-Base").setStyle({ fontSize: "0.9em" }),
-        new UI.HDiv({ gap: 4 }).add(
-            new UI.Span("Erweiterungen:").setStyle({ fontSize: "0.85em" }),
-            new UI.Span("ACE").setStyle({ 
-                fontSize: "0.75em", 
-                background: "var(--ui-color-nav-active)", 
-                color: "white", 
-                padding: "2px 6px", 
-                borderRadius: "3px" 
+    function displayMissionDetails(mission) {
+        missionTitle.setText(mission.name);
+        missionDesc.setText(mission.description);
+        
+        // Required mods list
+        requiredModsList.el.innerHTML = "";
+        if (mission.requiredMods.length === 0) {
+            requiredModsList.add(
+                new UI.Text("Keine speziellen Anforderungen").setStyle({ 
+                    color: "var(--ui-color-text-muted)" 
+                })
+            );
+        } else {
+            const modsList = new UI.VDiv({ gap: 3 });
+            const configMods = allConfigs.find(c => c.name === selectedConfig)?.workshop?.mods || [];
+            
+            mission.requiredMods.forEach(mod => {
+                const isMissing = !configMods.some(m => m.id === mod.id);
+                
+                const modRow = new UI.HDiv({ gap: 8, align: "center" }).setStyle({
+                    padding: "6px 8px",
+                    borderBottom: "1px solid var(--ui-color-border)",
+                    fontSize: "0.9em"
+                });
+                
+                modRow.add(
+                    new UI.Span(isMissing ? "❌" : "✓").setStyle({ 
+                        minWidth: "20px",
+                        color: isMissing ? "var(--ui-color-error)" : "var(--ui-color-success, #4CAF50)"
+                    }),
+                    new UI.Span(mod.name).setStyle({ flex: "1" }),
+                    new UI.Span(`(${mod.id})`).setStyle({ 
+                        fontSize: "0.8em", 
+                        color: "var(--ui-color-text-muted)" 
+                    })
+                );
+                modsList.add(modRow);
+            });
+            requiredModsList.add(modsList);
+        }
+        
+        // Upload area
+        uploadArea.el.innerHTML = "";
+        const uploadContainer = new UI.VDiv({ gap: 8 });
+        uploadContainer.setStyle({
+            border: "2px dashed var(--ui-color-border)",
+            borderRadius: "var(--ui-radius-md)",
+            padding: "16px",
+            textAlign: "center",
+            cursor: "pointer",
+            transition: "all 0.2s"
+        });
+        
+        uploadContainer.add(
+            new UI.Text("📤 Custom Mods hierher ziehen oder klicken").setStyle({
+                fontWeight: "600",
+                fontSize: "0.95em"
             }),
-            new UI.Span("CBA").setStyle({ 
-                fontSize: "0.75em", 
-                background: "var(--ui-color-nav-active)", 
-                color: "white", 
-                padding: "2px 6px", 
-                borderRadius: "3px" 
+            new UI.Text(`(für ${mission.name} + ${selectedConfig})`).setStyle({
+                fontSize: "0.85em",
+                color: "var(--ui-color-text-muted)"
             })
-        )
-    );
-    summaryGrid.add(summaryCard("Active Profile", profileContent, "⚙️"));
-    
-    // Modset Card
-    const modsetContent = new UI.VDiv({ gap: 4 }).add(
-        new UI.Text("124 Mods").setStyle({ fontWeight: "600", color: "var(--ui-color-accent)" }),
-        new UI.HDiv({ gap: 8 }).add(
-            new UI.Span("3 optional").setStyle({ fontSize: "0.9em" }),
-            new UI.Span("Hash OK").setStyle({ fontSize: "0.9em", color: "var(--ui-color-ok)" })
-        )
-    );
-    summaryGrid.add(summaryCard("Modset", modsetContent, "📦"));
-    
-    // Server Health Card
-    const healthContent = new UI.VDiv({ gap: 4 }).add(
-        new UI.Text("Uptime: 5d 2h").setStyle({ fontSize: "0.9em" }),
-        new UI.HDiv({ gap: 12 }).add(
-            new UI.VDiv({ gap: 2 }).add(
-                new UI.Span("CPU").setStyle({ fontSize: "0.75em", color: "var(--ui-color-text-muted)" }),
-                new UI.Span("45%").setStyle({ fontWeight: "600" })
-            ),
-            new UI.VDiv({ gap: 2 }).add(
-                new UI.Span("RAM").setStyle({ fontSize: "0.75em", color: "var(--ui-color-text-muted)" }),
-                new UI.Span("8.2 GB").setStyle({ fontWeight: "600" })
-            ),
-            new UI.VDiv({ gap: 2 }).add(
-                new UI.Span("FPS").setStyle({ fontSize: "0.75em", color: "var(--ui-color-text-muted)" }),
-                new UI.Span("58").setStyle({ fontWeight: "600" })
-            )
-        )
-    );
-    summaryGrid.add(summaryCard("Server Health", healthContent, "💚"));
-    
-    // Players Card
-    const playersContent = new UI.VDiv({ gap: 4 }).add(
-        new UI.Text("12/60 online").setStyle({ fontWeight: "600", fontSize: "1.1em", color: "var(--ui-color-accent)" }),
-        new UI.Text("Peak today: 45").setStyle({ fontSize: "0.9em", color: "var(--ui-color-text-muted)" })
-    );
-    summaryGrid.add(summaryCard("Players", playersContent, "👥"));
-    
-    container.add(summaryGrid);
-    
-    // ===== Monitoring Section =====
-    const monitoringDiv = new UI.VDiv({ gap: 8 });
-    monitoringDiv.add(
-        new UI.HDiv({ gap: 8, align: "center" }).add(
-            new UI.Heading("Monitoring", { level: 4 }).setStyle({ margin: "0" }),
-            new UI.HSpacer(),
-            new UI.Button("15m").setStyle({ padding: "4px 8px", fontSize: "0.9em" }),
-            new UI.Button("1h").setStyle({ padding: "4px 8px", fontSize: "0.9em" }),
-            new UI.Button("6h").setStyle({ padding: "4px 8px", fontSize: "0.9em" })
-        )
-    );
-    
-    // Mini charts
-    const miniChartsGrid = new UI.HDiv({ gap: 8 });
-    miniChartsGrid.setStyle({ display: "flex", flexWrap: "wrap" });
-    
-    const miniChart = (title) => {
-        const chart = new UI.VDiv({ gap: 6 });
-        chart.setStyle({
-            flex: "1 1 calc(50% - 4px)",
-            minWidth: "200px",
-            background: "var(--ui-color-surface)",
-            border: "1px solid var(--ui-color-border)",
-            borderRadius: "var(--ui-radius-md)",
-            padding: "8px"
-        });
-        chart.add(
-            new UI.Span(title).setStyle({ fontSize: "0.9em", fontWeight: "600" }),
-            new UI.VDiv().setStyle({
-                height: "80px",
-                background: "var(--ui-color-surface-muted)",
-                borderRadius: "4px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "var(--ui-color-text-muted)",
-                fontSize: "0.8em"
-            }).add(
-                new UI.Text("Chart wird aktualisiert...")
-            )
         );
-        return chart;
-    };
+        
+        uploadContainer.el.addEventListener("click", () => {
+            alert(`Upload würde startenfor:\nConfig: ${selectedConfig}\nMission: ${mission.name}`);
+        });
+        
+        uploadContainer.el.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            uploadContainer.setStyle({ background: "rgba(var(--ui-color-nav-active), 0.1)" });
+        });
+        
+        uploadContainer.el.addEventListener("dragleave", () => {
+            uploadContainer.setStyle({ background: "" });
+        });
+        
+        uploadArea.add(uploadContainer);
+    }
     
-    miniChartsGrid.add(
-        miniChart("CPU"),
-        miniChart("RAM"),
-        miniChart("Netzwerk"),
-        miniChart("Disk I/O")
-    );
-    
-    monitoringDiv.add(miniChartsGrid);
-    monitoringDiv.setStyle({
-        background: "var(--ui-color-surface)",
-        border: "1px solid var(--ui-color-border)",
-        borderRadius: "var(--ui-radius-md)",
-        padding: "12px"
-    });
-    container.add(monitoringDiv);
-    
-    // ===== Activity Feed =====
-    const activityDiv = new UI.VDiv({ gap: 8 });
-    activityDiv.add(
-        new UI.Heading("Activity Feed", { level: 4 }).setStyle({ margin: "0" }),
-        new UI.VDiv().setStyle({
-            background: "var(--ui-color-surface)",
-            border: "1px solid var(--ui-color-border)",
-            borderRadius: "var(--ui-radius-md)",
-            padding: "12px",
-            maxHeight: "200px",
-            overflowY: "auto",
-            fontSize: "0.9em",
-            display: "flex",
-            flexDirection: "column",
-            gap: "6px"
-        }).add(
-            new UI.Text("20:15 - Server started with Profile 'Production'"),
-            new UI.Text("20:10 - Mod update completed (124 mods)"),
-            new UI.Text("20:05 - Player joined: PlayerOne"),
-            new UI.Text("19:55 - Config changed: Production (Requires restart: No)"),
-            new UI.Text("19:45 - Validation OK")
-        )
-    );
-    container.add(activityDiv);
+    // Initial load
+    loadConfigs();
     
     return container;
 }
-
