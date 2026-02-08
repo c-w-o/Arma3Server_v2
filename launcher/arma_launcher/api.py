@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Optional, List
 from fastapi import FastAPI, HTTPException, Query, Body, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from starlette.responses import Response, JSONResponse
@@ -13,6 +13,8 @@ from hashlib import sha256
 from datetime import datetime, timezone
 import shutil
 import json
+import re
+import html as html_module
 from jsonschema import validate, RefResolver
 from jsonschema.exceptions import ValidationError
 from .config_loader import load_json, merge_defaults_with_override, transform_file_config_to_internal, save_config_override
@@ -685,6 +687,294 @@ def create_app(settings: Settings) -> FastAPI:
             tb = traceback.format_exc()
             print(f"Error resolving mod IDs: {tb}")
             raise HTTPException(status_code=500, detail=f"Error resolving mod IDs: {str(e)}")
+
+    # ========================================
+    # HTML Preset Import/Export
+    # ========================================
+    
+    def _generate_html_preset(config_name: str, mods: list[dict], preset_name: str) -> str:
+        """Generate Arma3 HTML preset from mod list (matching Arma3 Launcher format)."""
+        html_lines = [
+            '<?xml version="1.0" encoding="utf-8"?>',
+            '<html>',
+            '  <!--Created by Arma 3 Server Launcher-->',
+            '  <head>',
+            '    <meta name="arma:Type" content="preset" />',
+            f'    <meta name="arma:PresetName" content="{html_module.escape(preset_name)}" />',
+            '    <meta name="generator" content="Arma3 Server Launcher" />',
+            '    <title>Arma 3</title>',
+            '    <link href="https://fonts.googleapis.com/css?family=Roboto" rel="stylesheet" type="text/css" />',
+            '    <style>',
+            'body {',
+            '    margin: 0;',
+            '    padding: 0;',
+            '    color: #fff;',
+            '    background: #000;',
+            '}',
+            'body, th, td {',
+            '    font: 95%/1.3 Roboto, Segoe UI, Tahoma, Arial, Helvetica, sans-serif;',
+            '}',
+            'td {',
+            '    padding: 3px 30px 3px 0;',
+            '}',
+            'h1 {',
+            '    padding: 20px 20px 0 20px;',
+            '    color: white;',
+            '    font-weight: 200;',
+            '    font-family: segoe ui;',
+            '    font-size: 3em;',
+            '    margin: 0;',
+            '}',
+            'em {',
+            '    font-variant: italic;',
+            '    color: silver;',
+            '}',
+            '.before-list {',
+            '    padding: 5px 20px 10px 20px;',
+            '}',
+            '.mod-list {',
+            '    background: #222222;',
+            '    padding: 20px;',
+            '}',
+            '.footer {',
+            '    padding: 20px;',
+            '    color: gray;',
+            '}',
+            'a {',
+            '    color: #D18F21;',
+            '    text-decoration: underline;',
+            '}',
+            'a:hover {',
+            '    color: #F1AF41;',
+            '    text-decoration: none;',
+            '}',
+            '.from-steam {',
+            '    color: #449EBD;',
+            '}',
+            '    </style>',
+            '  </head>',
+            '  <body>',
+            '    <h1>Arma 3 Mods</h1>',
+            '    <p class="before-list">',
+            '      <em>Config: ' + html_module.escape(config_name) + '</em>',
+            '    </p>',
+            '    <div class="mod-list">',
+            '      <table>',
+        ]
+        
+        for mod in mods:
+            # Handle both Pydantic models and dicts
+            if isinstance(mod, dict):
+                mod_id = mod.get('id')
+                mod_name = html_module.escape(mod.get('name', f'Mod {mod_id}'))
+            else:
+                # Pydantic model
+                mod_id = mod.id
+                mod_name = html_module.escape(mod.name or f'Mod {mod_id}')
+            
+            html_lines.append('        <tr data-type="ModContainer">')
+            html_lines.append(f'          <td data-type="DisplayName">{mod_name}</td>')
+            html_lines.append('          <td>')
+            html_lines.append('            <span class="from-steam">Steam</span>')
+            html_lines.append('          </td>')
+            html_lines.append('          <td>')
+            html_lines.append(f'            <a href="https://steamcommunity.com/sharedfiles/filedetails/?id={mod_id}" data-type="Link">https://steamcommunity.com/sharedfiles/filedetails/?id={mod_id}</a>')
+            html_lines.append('          </td>')
+            html_lines.append('        </tr>')
+        
+        html_lines.extend([
+            '      </table>',
+            '    </div>',
+            '    <div class="footer">',
+            '      <span>Created by Arma 3 Server Launcher</span>',
+            '    </div>',
+            '  </body>',
+            '</html>',
+        ])
+        
+        return '\n'.join(html_lines)
+    
+    def _parse_html_preset(html_content: str) -> list[int]:
+        """Parse Arma3 HTML preset and extract mod IDs."""
+        # Extract all Steam Workshop URLs
+        pattern = r'steamcommunity\.com/sharedfiles/filedetails/\?id=(\d+)'
+        matches = re.findall(pattern, html_content)
+        return [int(mod_id) for mod_id in matches]
+    
+    @app.get("/config/{config_name}/preset-all.html", response_class=HTMLResponse)
+    async def download_preset_all(config_name: str):
+        """Download HTML preset with all mods except serverMods."""
+        try:
+            defaults = orch.store.load_defaults()
+            override = orch.store.load_override(config_name)
+            merged = orch.merger.merge(defaults, override)
+            
+            mods_data = merged.mods if merged.mods else FileConfig_Mods()
+            
+            # Collect all mods except serverMods
+            all_mods = []
+            for category in ['baseMods', 'clientMods', 'maps', 'missionMods']:
+                items = getattr(mods_data, category, None) or []
+                if items:
+                    all_mods.extend(items)
+            
+            # Dedupe by ID
+            seen_ids = set()
+            unique_mods = []
+            for mod in all_mods:
+                if mod.id not in seen_ids:
+                    seen_ids.add(mod.id)
+                    unique_mods.append(mod)
+            
+            html_content = _generate_html_preset(
+                config_name,
+                unique_mods,
+                f"{config_name} - All Mods"
+            )
+            
+            return HTMLResponse(
+                content=html_content,
+                headers={
+                    "Content-Disposition": f'attachment; filename="{config_name}_all.html"'
+                }
+            )
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail=f"Config '{config_name}' not found")
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            print(f"Error generating preset: {tb}")
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    @app.get("/config/{config_name}/preset-base.html", response_class=HTMLResponse)
+    async def download_preset_base(config_name: str):
+        """Download HTML preset with baseMods and maps only (no serverMods, no clientMods)."""
+        try:
+            defaults = orch.store.load_defaults()
+            override = orch.store.load_override(config_name)
+            merged = orch.merger.merge(defaults, override)
+            
+            mods_data = merged.mods if merged.mods else FileConfig_Mods()
+            
+            # Collect baseMods and maps
+            base_mods = []
+            for category in ['baseMods', 'maps']:
+                items = getattr(mods_data, category, None) or []
+                if items:
+                    base_mods.extend(items)
+            
+            # Dedupe by ID
+            seen_ids = set()
+            unique_mods = []
+            for mod in base_mods:
+                if mod.id not in seen_ids:
+                    seen_ids.add(mod.id)
+                    unique_mods.append(mod)
+            
+            html_content = _generate_html_preset(
+                config_name,
+                unique_mods,
+                f"{config_name} - Mods & Maps"
+            )
+            
+            return HTMLResponse(
+                content=html_content,
+                headers={
+                    "Content-Disposition": f'attachment; filename="{config_name}_base.html"'
+                }
+            )
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail=f"Config '{config_name}' not found")
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            print(f"Error generating preset: {tb}")
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    @app.post("/config/{config_name}/import-preset")
+    async def import_html_preset(config_name: str, file: UploadFile = File(...)):
+        """
+        Import HTML preset: 
+        - Extract baseMods and maps from uploaded HTML
+        - Remove disallowed clientMods
+        - Return sanitized HTML for download
+        """
+        try:
+            # Read uploaded file
+            html_content = (await file.read()).decode('utf-8')
+            
+            # Parse mod IDs from HTML
+            uploaded_mod_ids = _parse_html_preset(html_content)
+            
+            if not uploaded_mod_ids:
+                raise HTTPException(status_code=400, detail="No mod IDs found in uploaded HTML")
+            
+            # Load current config to get allowed mods
+            defaults = orch.store.load_defaults()
+            override = orch.store.load_override(config_name)
+            merged = orch.merger.merge(defaults, override)
+            mods_data = merged.mods if merged.mods else FileConfig_Mods()
+            
+            # Get IDs of allowed baseMods, maps, and missionMods
+            allowed_ids = set()
+            for category in ['baseMods', 'maps', 'missionMods']:
+                items = getattr(mods_data, category, None) or []
+                for mod in items:
+                    allowed_ids.add(mod.id)
+            
+            # Get IDs of clientMods (to be filtered out)
+            client_mod_ids = set()
+            items = getattr(mods_data, 'clientMods', None) or []
+            for mod in items:
+                client_mod_ids.add(mod.id)
+            
+            # Filter: keep only allowed mods, remove clientMods
+            filtered_mod_ids = [
+                mod_id for mod_id in uploaded_mod_ids 
+                if mod_id in allowed_ids and mod_id not in client_mod_ids
+            ]
+            
+            # Resolve names for filtered mods
+            resolved_mods = []
+            for mod_id in filtered_mod_ids:
+                # Find name from config
+                name = None
+                for category in ['baseMods', 'maps', 'missionMods']:
+                    items = getattr(mods_data, category, None) or []
+                    for mod in items:
+                        if mod.id == mod_id:
+                            name = mod.name or f'Mod {mod_id}'
+                            break
+                    if name:
+                        break
+                
+                resolved_mods.append({'id': mod_id, 'name': name or f'Mod {mod_id}'})
+            
+            # Generate sanitized HTML
+            sanitized_html = _generate_html_preset(
+                config_name,
+                resolved_mods,
+                f"{config_name} - Sanitized"
+            )
+            
+            return {
+                "ok": True,
+                "detail": f"Processed {len(uploaded_mod_ids)} uploaded mods, kept {len(filtered_mod_ids)} allowed mods",
+                "data": {
+                    "uploadedCount": len(uploaded_mod_ids),
+                    "filteredCount": len(filtered_mod_ids),
+                    "removedCount": len(uploaded_mod_ids) - len(filtered_mod_ids),
+                    "sanitizedHtml": sanitized_html
+                }
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            print(f"Error importing HTML preset: {tb}")
+            raise HTTPException(status_code=500, detail=f"Error importing preset: {str(e)}")
 
     # Register variant configuration API routes
     register_variants_routes(app, settings, config_layout)

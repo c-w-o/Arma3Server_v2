@@ -21,6 +21,119 @@ export function createModsContent() {
     // Dropdown for selecting config
     const dropdown = new UI.Select({ placeholder: "Select a configuration..." });
     dropdown.bind(globalStore, "activeConfig");
+
+    // HTML Preset Import/Export Section
+    let currentPresetConfig = null;
+    const presetSection = new UI.VDiv({ gap: 12 });
+    presetSection.setStyle({
+        border: "2px solid var(--ui-color-primary)",
+        borderRadius: "var(--ui-radius-md)",
+        padding: "16px",
+        background: "var(--ui-color-surface-variant)",
+        display: "none"
+    });
+
+    presetSection.add(
+        new UI.Heading("HTML Preset Import/Export", { level: 5 }).setStyle({ margin: "0 0 12px 0" })
+    );
+
+    const downloadRow = new UI.HDiv({ gap: 8, align: "stretch" });
+
+    const downloadAllBtn = new UI.Button("⬇ Download Alle Mods (ohne Server)");
+    downloadAllBtn.setStyle({ flex: "1", padding: "10px" });
+    downloadAllBtn.onClick(() => {
+        if (!currentPresetConfig) {
+            alert("Bitte wählen Sie eine Konfiguration aus.");
+            return;
+        }
+        window.location.href = `/config/${currentPresetConfig}/preset-all.html`;
+    });
+
+    const downloadBaseBtn = new UI.Button("⬇ Download Mods & Maps");
+    downloadBaseBtn.setStyle({ flex: "1", padding: "10px" });
+    downloadBaseBtn.onClick(() => {
+        if (!currentPresetConfig) {
+            alert("Bitte wählen Sie eine Konfiguration aus.");
+            return;
+        }
+        window.location.href = `/config/${currentPresetConfig}/preset-base.html`;
+    });
+
+    downloadRow.add(downloadAllBtn, downloadBaseBtn);
+    presetSection.add(downloadRow);
+
+    const uploadLabel = new UI.Text("HTML Preset hochladen (wird abgeglichen und bereinigt):");
+    uploadLabel.setStyle({ fontSize: "0.9em", margin: "8px 0 4px 0" });
+
+    const uploadRow = new UI.HDiv({ gap: 8, align: "stretch" });
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.accept = ".html";
+    fileInput.style.flex = "1";
+    fileInput.style.padding = "8px";
+
+    const uploadBtn = new UI.Button("📤 Upload & Bereinigen");
+    uploadBtn.setStyle({ padding: "8px 16px" });
+    uploadBtn.onClick(async () => {
+        const file = fileInput.files[0];
+        if (!file) {
+            alert("Bitte wählen Sie eine HTML-Datei aus.");
+            return;
+        }
+        if (!currentPresetConfig) {
+            alert("Bitte wählen Sie eine Konfiguration aus.");
+            return;
+        }
+
+        uploadBtn.setDisabled(true);
+        uploadBtn.setText("Verarbeite...");
+
+        try {
+            const formData = new FormData();
+            formData.append("file", file);
+
+            const resp = await fetch(`/config/${currentPresetConfig}/import-preset`, {
+                method: "POST",
+                body: formData
+            });
+
+            if (!resp.ok) {
+                const error = await resp.json();
+                throw new Error(error.detail || "Upload fehlgeschlagen");
+            }
+
+            const result = await resp.json();
+
+            if (result.ok && result.data && result.data.sanitizedHtml) {
+                const blob = new Blob([result.data.sanitizedHtml], { type: "text/html" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `${currentPresetConfig}_sanitized.html`;
+                a.click();
+                URL.revokeObjectURL(url);
+
+                alert(`✅ ${result.detail}\n\nBereinigte HTML wurde heruntergeladen.`);
+            } else {
+                alert("Upload erfolgreich, aber keine bereinigte HTML erhalten.");
+            }
+
+            fileInput.value = "";
+        } catch (err) {
+            alert(`Fehler beim Upload: ${err.message}`);
+        } finally {
+            uploadBtn.setDisabled(false);
+            uploadBtn.setText("📤 Upload & Bereinigen");
+        }
+    });
+
+    uploadRow.add(fileInput, uploadBtn);
+    presetSection.add(uploadLabel, uploadRow);
+
+    function setPresetConfig(configName) {
+        currentPresetConfig = configName || null;
+        presetSection.el.style.display = currentPresetConfig ? "block" : "none";
+    }
     
     // Table containers
     const modsAndMapsTable = new UI.TableView();
@@ -87,7 +200,12 @@ export function createModsContent() {
     
     function displayModsForConfig(configName, configs) {
         const config = configs.find(c => c.name === configName);
-        if (!config) return;
+        if (!config) {
+            setPresetConfig(null);
+            return;
+        }
+        
+        setPresetConfig(configName);
         
         console.log("Config:", config); // Debug: Check if dlcs are in config
         
@@ -136,6 +254,7 @@ export function createModsContent() {
     
     contentArea.add(
         dropdown,
+        presetSection,
         modsHeader,
         modsAndMapsTable,
         clientHeader,
