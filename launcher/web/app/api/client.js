@@ -141,6 +141,24 @@ export class LauncherApiClient {
     return resp;
   }
 
+  // ========== Workshop Updates ==========
+
+  async getWorkshopUpdates(configName) {
+    const safeName = encodeURIComponent(configName);
+    const resp = await this.rest.get(`/config/${safeName}/workshop/updates`);
+    return resp;
+  }
+
+  async updateWorkshopItems(configName, items, { validate = false } = {}) {
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new Error("items must be a non-empty array");
+    }
+    const safeName = encodeURIComponent(configName);
+    const payload = { items, validate: !!validate };
+    const resp = await this.rest.post(`/config/${safeName}/workshop/updates`, payload);
+    return resp;
+  }
+
   // ========== Variants API ==========
 
   async getDefaultsMods() {

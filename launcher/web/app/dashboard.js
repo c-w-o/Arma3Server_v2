@@ -9,6 +9,8 @@ export function createDashboardContent() {
     let selectedMission = null;
     let allConfigs = [];
     let missions = [];
+    let updateItems = [];
+    let updateSelection = new Set();
     
     // ===== Header =====
     container.add(
@@ -36,17 +38,68 @@ export function createDashboardContent() {
         selectedMission = null;
         missionList.el.innerHTML = "";
         detailsSection.setStyle({ display: "none" });
+        updateItems = [];
+        updateSelection = new Set();
+        updateSummary.setText("Keine Prüfung durchgeführt.");
+        updatesList.el.innerHTML = "";
+        updateBtn.setDisabled(true);
+        setUpdateProgress({ mode: "hidden" });
         
         if (selectedConfig) {
             await loadMissionsForConfig(selectedConfig);
             missionSection.setStyle({ display: "block" });
+            updateSection.setStyle({ display: "block" });
         } else {
             missionSection.setStyle({ display: "none" });
+            updateSection.setStyle({ display: "none" });
         }
     });
     
     configSection.add(configSelect);
     container.add(configSection);
+
+    // ===== Mod Updates Section =====
+    const updateSection = new UI.VDiv({ gap: 12 });
+    updateSection.setStyle({
+        background: "var(--ui-color-surface)",
+        border: "1px solid var(--ui-color-border)",
+        borderRadius: "var(--ui-radius-md)",
+        padding: "16px",
+        display: "none"
+    });
+
+    updateSection.add(
+        new UI.Heading("Mod-Updates", { level: 4 }).setStyle({ margin: "0 0 8px 0" })
+    );
+
+    const updateActions = new UI.HDiv({ gap: 8, align: "center" });
+    const checkUpdatesBtn = new UI.Button("🔍 Aktualität prüfen", { variant: "secondary" });
+    const selectAllBtn = new UI.Button("Alle auswählen", { variant: "secondary" });
+    const selectNoneBtn = new UI.Button("Keine auswählen", { variant: "secondary" });
+    const updateBtn = new UI.Button("⬇️ Update starten");
+    updateBtn.setDisabled(true);
+
+    updateActions.add(checkUpdatesBtn, selectAllBtn, selectNoneBtn, updateBtn);
+
+    const updateSummary = new UI.Text("Keine Prüfung durchgeführt.");
+    updateSummary.setStyle({ fontSize: "0.85em", color: "var(--ui-color-text-muted)" });
+
+    const updateProgressWrap = new UI.HDiv({ gap: 8, align: "center" });
+    updateProgressWrap.setStyle({ display: "none" });
+    const updateProgressBar = new UI.BaseElement("progress");
+    updateProgressBar.setAttr("max", "100");
+    updateProgressBar.setStyle({ width: "240px", height: "10px" });
+    const updateProgressText = new UI.Span("").setStyle({
+        fontSize: "0.8em",
+        color: "var(--ui-color-text-muted)"
+    });
+    updateProgressWrap.add(updateProgressBar, updateProgressText);
+
+    const updatesList = new UI.VDiv({ gap: 6 });
+    updatesList.setStyle({ maxHeight: "340px", overflowY: "auto" });
+
+    updateSection.add(updateActions, updateSummary, updateProgressWrap, updatesList);
+    container.add(updateSection);
     
     // ===== Missions Section =====
     const missionSection = new UI.VDiv({ gap: 12 });
@@ -162,6 +215,260 @@ export function createDashboardContent() {
             );
         }
     }
+
+    function formatEpoch(ts) {
+        if (!ts) return "—";
+        try {
+            return new Date(ts * 1000).toLocaleString();
+        } catch {
+            return "—";
+        }
+    }
+
+    function needsUpdate(item) {
+        return !item.installed || item.status !== "up_to_date";
+    }
+
+    function updatePriority(item) {
+        if (!item.installed) return 0;
+        if (item.status === "outdated") return 1;
+        if (item.status !== "up_to_date") return 2;
+        return 3;
+    }
+
+    function setUpdateProgress({ mode = "hidden", value = 0, max = 100, text = "" } = {}) {
+        if (mode === "hidden") {
+            updateProgressWrap.setStyle({ display: "none" });
+            updateProgressText.setText("");
+            updateProgressBar.removeAttr("value");
+            return;
+        }
+        updateProgressWrap.setStyle({ display: "flex" });
+        updateProgressText.setText(text || "");
+        if (mode === "indeterminate") {
+            updateProgressBar.removeAttr("value");
+            updateProgressBar.setAttr("max", String(max));
+        } else {
+            updateProgressBar.setAttr("max", String(max));
+            updateProgressBar.setAttr("value", String(value));
+        }
+    }
+
+    function renderUpdateList() {
+        updatesList.el.innerHTML = "";
+
+        if (!Array.isArray(updateItems) || updateItems.length === 0) {
+            updatesList.add(
+                new UI.Text("Keine Mods gefunden.").setStyle({
+                    color: "var(--ui-color-text-muted)",
+                    fontStyle: "italic"
+                })
+            );
+            updateBtn.setDisabled(true);
+            return;
+        }
+
+        let outdated = 0;
+        let unknown = 0;
+        let upToDate = 0;
+        let missing = 0;
+
+        updateItems.forEach(item => {
+            if (!item.installed) missing += 1;
+            if (item.status === "outdated") outdated += 1;
+            else if (item.status === "up_to_date") upToDate += 1;
+            else unknown += 1;
+        });
+
+        updateSummary.setText(`Gefunden: ${updateItems.length} • Fehlend: ${missing} • Veraltet: ${outdated} • Unbekannt: ${unknown} • Aktuell: ${upToDate}`);
+        updateBtn.setDisabled(updateSelection.size === 0);
+
+        const sortedItems = [...updateItems].sort((a, b) => {
+            const pa = updatePriority(a);
+            const pb = updatePriority(b);
+            if (pa !== pb) return pa - pb;
+            const an = (a.name || "").toLowerCase();
+            const bn = (b.name || "").toLowerCase();
+            if (an !== bn) return an.localeCompare(bn);
+            return (a.id || 0) - (b.id || 0);
+        });
+
+        sortedItems.forEach(item => {
+            const key = `${item.kind}:${item.id}`;
+            const checkbox = new UI.Checkbox(updateSelection.has(key), { label: item.name || `Mod ${item.id}` });
+            checkbox.on("change", () => {
+                if (checkbox.getValue()) {
+                    updateSelection.add(key);
+                } else {
+                    updateSelection.delete(key);
+                }
+                updateBtn.setDisabled(updateSelection.size === 0);
+            });
+
+            let statusText = "❓ unbekannt";
+            let statusColor = "var(--ui-color-text-muted)";
+            if (!item.installed) {
+                statusText = "❌ fehlt";
+                statusColor = "var(--ui-color-error)";
+            } else if (item.status === "up_to_date") {
+                statusText = "✅ aktuell";
+                statusColor = "var(--ui-color-success, #4CAF50)";
+            } else if (item.status === "outdated") {
+                statusText = "⬇️ Update";
+                statusColor = "var(--ui-color-warning, #FF9800)";
+            }
+
+            const row = new UI.HDiv({ gap: 8, align: "center" }).setStyle({
+                padding: "6px 8px",
+                borderBottom: "1px solid var(--ui-color-border)",
+                fontSize: "0.85em"
+            });
+
+            const idSpan = new UI.Span(`(${item.id})`).setStyle({
+                minWidth: "110px",
+                textAlign: "right",
+                color: "var(--ui-color-text-muted)"
+            });
+
+            const kindSpan = new UI.Span(item.kind).setStyle({
+                minWidth: "90px",
+                fontSize: "0.8em",
+                color: "var(--ui-color-text-muted)"
+            });
+
+            const statusSpan = new UI.Span(statusText).setStyle({
+                minWidth: "90px",
+                color: statusColor,
+                fontWeight: "600"
+            });
+
+            const timeText = item.installed
+                ? `Local: ${formatEpoch(item.localTimestamp)} | Remote: ${formatEpoch(item.remoteTimestamp)}`
+                : "Nicht installiert";
+
+            const timeSpan = new UI.Span(timeText).setStyle({
+                fontSize: "0.8em",
+                color: "var(--ui-color-text-muted)"
+            });
+
+            row.add(checkbox, idSpan, kindSpan, statusSpan, timeSpan);
+            updatesList.add(row);
+        });
+    }
+
+    async function checkModUpdates() {
+        if (!selectedConfig) return;
+        checkUpdatesBtn.setDisabled(true);
+        updateBtn.setDisabled(true);
+        updateSummary.setText("Prüfe Aktualität...");
+        updatesList.el.innerHTML = "";
+        setUpdateProgress({ mode: "indeterminate", text: "Prüfe Mods…" });
+
+        try {
+            const resp = await apiClient.getWorkshopUpdates(selectedConfig);
+            if (!resp.ok) throw new Error(resp.detail || "Update-Check fehlgeschlagen");
+            updateItems = Array.isArray(resp.items) ? resp.items : [];
+            updateSelection = new Set(
+                updateItems
+                    .filter(item => needsUpdate(item))
+                    .map(item => `${item.kind}:${item.id}`)
+            );
+            renderUpdateList();
+        } catch (err) {
+            console.error("Failed to check mod updates:", err);
+            updateSummary.setText(`❌ Fehler beim Prüfen: ${err.message}`);
+            updatesList.el.innerHTML = "";
+            updateBtn.setDisabled(true);
+        } finally {
+            setUpdateProgress({ mode: "hidden" });
+            checkUpdatesBtn.setDisabled(false);
+        }
+    }
+
+    async function runModUpdates() {
+        if (!selectedConfig || updateSelection.size === 0) return;
+        const items = updateItems
+            .filter(item => updateSelection.has(`${item.kind}:${item.id}`))
+            .map(item => ({ id: item.id, kind: item.kind, name: item.name }));
+
+        if (items.length === 0) return;
+
+        updateBtn.setDisabled(true);
+        checkUpdatesBtn.setDisabled(true);
+
+        const total = items.length;
+        let done = 0;
+        const updated = [];
+        const skipped = [];
+        const failed = [];
+
+        updateSummary.setText(`Update läuft... (${items.length} Mods)`);
+        setUpdateProgress({ mode: "determinate", value: 0, max: total, text: `Update startet (0/${total})` });
+
+        try {
+            for (const item of items) {
+                const label = item.name || `Mod ${item.id}`;
+                setUpdateProgress({
+                    mode: "determinate",
+                    value: done,
+                    max: total,
+                    text: `Update: ${label} (${done}/${total})`
+                });
+
+                try {
+                    const resp = await apiClient.updateWorkshopItems(selectedConfig, [{ id: item.id, kind: item.kind }]);
+                    if (!resp.ok) throw new Error(resp.detail || "Update fehlgeschlagen");
+                    const data = resp.data || {};
+                    if (Array.isArray(data.updated)) updated.push(...data.updated);
+                    if (Array.isArray(data.skipped)) skipped.push(...data.skipped);
+                    if (Array.isArray(data.failed)) failed.push(...data.failed);
+                } catch (err) {
+                    failed.push({ id: item.id, kind: item.kind, error: err.message });
+                }
+
+                done += 1;
+                setUpdateProgress({
+                    mode: "determinate",
+                    value: done,
+                    max: total,
+                    text: `Update läuft… (${done}/${total})`
+                });
+            }
+
+            const detail = `Updated ${updated.length} • Skipped ${skipped.length} • Failed ${failed.length}`;
+            updateSummary.setText(failed.length ? `⚠️ ${detail}` : detail);
+            await checkModUpdates();
+        } catch (err) {
+            console.error("Failed to update mods:", err);
+            updateSummary.setText(`❌ Update fehlgeschlagen: ${err.message}`);
+        } finally {
+            setUpdateProgress({ mode: "hidden" });
+            checkUpdatesBtn.setDisabled(false);
+            updateBtn.setDisabled(updateSelection.size === 0);
+        }
+    }
+
+    checkUpdatesBtn.onClick(() => {
+        checkModUpdates();
+    });
+
+    selectAllBtn.onClick(() => {
+        updateSelection = new Set(
+            updateItems
+                .filter(item => needsUpdate(item))
+                .map(item => `${item.kind}:${item.id}`)
+        );
+        renderUpdateList();
+    });
+
+    selectNoneBtn.onClick(() => {
+        updateSelection = new Set();
+        renderUpdateList();
+    });
+
+    updateBtn.onClick(() => {
+        runModUpdates();
+    });
     
     function displayMissionsList() {
         missionList.el.innerHTML = "";

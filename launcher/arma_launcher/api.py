@@ -22,6 +22,8 @@ from .models_file import FileConfig_Root, FileConfig_Override, FileConfig_Mods, 
 from .log_reader import list_logs, read_tail, read_from_cursor
 from .settings import Settings
 from .orchestrator import Orchestrator
+from .steamcmd import SteamCMD
+from .content_manager import ContentManager
 from .steam_metadata import ModMetadataResolver, resolve_mod_ids
 from .api_variants import register_variants_routes
 from .config.file_layout import ConfigLayout
@@ -600,6 +602,147 @@ def create_app(settings: Settings) -> FastAPI:
             return ActionResult(ok=True, detail="synced")
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
+
+    def _get_internal_config(config_name: str):
+        if config_name not in orch.store.list_configs():
+            raise HTTPException(status_code=404, detail=f"config '{config_name}' not found")
+        defaults = orch.store.load_defaults()
+        override = orch.store.load_override(config_name)
+        merged = orch.merger.merge(defaults, override)
+        return transform_file_config_to_internal(config_name, merged)
+
+    def _collect_workshop_items(cfg):
+        items = []
+        def add(kind: str, xs):
+            for it in (xs or []):
+                items.append((kind, it))
+        add("mods", cfg.active.workshop.mods)
+        add("clientmods", cfg.active.workshop.clientmods)
+        add("maps", cfg.active.workshop.maps)
+        add("servermods", cfg.active.workshop.servermods)
+        return items
+
+    @app.get("/config/{config_name}/workshop/updates")
+    def get_workshop_updates(config_name: str):
+        try:
+            cfg = _get_internal_config(config_name)
+            steamcmd = SteamCMD(settings)
+            cm = ContentManager(settings, orch.layout, steamcmd)
+
+            items = []
+            for kind, item in _collect_workshop_items(cfg):
+                wid = int(item.id)
+                name = item.name or str(wid)
+
+                dest_root = {"mods": cm.layout.mods, "clientmods": cm.layout.mods, "maps": cm.layout.maps, "servermods": cm.layout.servermods}.get(kind, cm.layout.mods)
+                dest = dest_root / str(wid)
+                marker = dest / ".modmeta.json"
+                local_meta = cm._read_modmeta(marker) or {}
+                local_ts = int(local_meta.get("timestamp") or 0)
+
+                up_to_date, remote_ts = cm._is_workshop_item_up_to_date(wid, dest, marker, name)
+                status = "unknown"
+                up_to_date_flag = None
+                if remote_ts is not None:
+                    up_to_date_flag = bool(up_to_date)
+                    status = "up_to_date" if up_to_date else "outdated"
+
+                items.append({
+                    "id": wid,
+                    "name": name,
+                    "kind": kind,
+                    "required": bool(getattr(item, "required", False)),
+                    "installed": dest.exists(),
+                    "localTimestamp": local_ts or None,
+                    "remoteTimestamp": remote_ts,
+                    "syncedAt": local_meta.get("synced_at"),
+                    "lastChecked": local_meta.get("last_checked"),
+                    "status": status,
+                    "upToDate": up_to_date_flag,
+                })
+
+            items.sort(key=lambda x: (x.get("kind") or "", x.get("name") or "", x.get("id") or 0))
+            return {"ok": True, "config": config_name, "items": items}
+        except HTTPException:
+            raise
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            print(f"Error checking workshop updates: {tb}")
+            raise HTTPException(status_code=500, detail=f"Error checking updates: {str(e)}")
+
+    @app.post("/config/{config_name}/workshop/updates", response_model=ActionResult)
+    def update_workshop_items(config_name: str, payload: dict = Body(...)):
+        try:
+            cfg = _get_internal_config(config_name)
+            items_req = payload.get("items", [])
+            validate = bool(payload.get("validate", False))
+
+            if not isinstance(items_req, list) or not items_req:
+                raise HTTPException(status_code=400, detail="items must be a non-empty list")
+
+            available = {}
+            for kind, item in _collect_workshop_items(cfg):
+                key = f"{kind}:{int(item.id)}"
+                available[key] = item
+
+            steamcmd = SteamCMD(settings)
+            cm = ContentManager(settings, orch.layout, steamcmd)
+
+            updated = []
+            skipped = []
+            failed = []
+            seen = set()
+
+            for entry in items_req:
+                if not isinstance(entry, dict):
+                    skipped.append({"entry": entry, "reason": "invalid_entry"})
+                    continue
+                kind = entry.get("kind")
+                mod_id = entry.get("id")
+                if not kind or mod_id is None:
+                    skipped.append({"entry": entry, "reason": "missing_kind_or_id"})
+                    continue
+                try:
+                    mod_id = int(mod_id)
+                except Exception:
+                    skipped.append({"entry": entry, "reason": "invalid_id"})
+                    continue
+
+                key = f"{kind}:{mod_id}"
+                if key in seen:
+                    continue
+                seen.add(key)
+
+                item = available.get(key)
+                if not item:
+                    skipped.append({"id": mod_id, "kind": kind, "reason": "not_in_config"})
+                    continue
+
+                try:
+                    result = cm.ensure_workshop_item(kind, item, validate=validate, dry_run=False)
+                    if result is None:
+                        skipped.append({"id": mod_id, "kind": kind, "reason": "optional_unavailable"})
+                    else:
+                        updated.append({"id": mod_id, "kind": kind, "changed": bool(result.changed)})
+                except Exception as e:
+                    failed.append({"id": mod_id, "kind": kind, "error": str(e)})
+
+            ok = len(failed) == 0
+            detail = f"Updated {len(updated)} items, skipped {len(skipped)}, failed {len(failed)}"
+            return ActionResult(ok=ok, detail=detail, data={
+                "config": config_name,
+                "updated": updated,
+                "skipped": skipped,
+                "failed": failed,
+            })
+        except HTTPException:
+            raise
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            print(f"Error updating workshop items: {tb}")
+            raise HTTPException(status_code=500, detail=f"Error updating mods: {str(e)}")
 
     @app.get("/status", response_model=ActionResult)
     def status():
