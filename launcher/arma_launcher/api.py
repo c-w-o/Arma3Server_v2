@@ -15,6 +15,7 @@ import shutil
 import json
 import re
 import html as html_module
+import uuid
 from jsonschema import validate, RefResolver
 from jsonschema.exceptions import ValidationError
 from .config_loader import load_json, merge_defaults_with_override, transform_file_config_to_internal, save_config_override
@@ -170,6 +171,14 @@ def create_app(settings: Settings) -> FastAPI:
             encoding="utf-8",
         )
 
+    def _compute_file_hash(file_path: Path) -> str:
+        """Compute SHA256 hash of a file."""
+        hasher = sha256()
+        with file_path.open("rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                hasher.update(chunk)
+        return hasher.hexdigest()
+
     def _compute_config_hash(config_name: str) -> str:
         defaults = orch.store.load_defaults()
         override = orch.store.load_override(config_name)
@@ -179,18 +188,15 @@ def create_app(settings: Settings) -> FastAPI:
         return sha256(blob).hexdigest()
 
     def _upsert_mission(meta: dict) -> None:
+        """Add mission metadata. Each upload is unique - no updates by name."""
         missions = _load_missions_index()
-        name = meta.get("name")
-        file_name = meta.get("file")
-        updated = False
-        for idx, existing in enumerate(missions):
-            if (name and existing.get("name") == name) or (file_name and existing.get("file") == file_name):
-                merged = {**existing, **meta}
-                missions[idx] = merged
-                updated = True
-                break
-        if not updated:
-            missions.append(meta)
+        mission_id = meta.get("id")
+        
+        # Ensure new mission has an ID
+        if not mission_id:
+            meta["id"] = str(uuid.uuid4())
+        
+        missions.append(meta)
         _save_missions_index(missions)
     if app_root.exists():
         app.mount("/app", NoCacheStaticFiles(directory=str(app_root), html=True), name="app")
@@ -270,7 +276,11 @@ def create_app(settings: Settings) -> FastAPI:
         missionName: str | None = Form(default=None),
         description: str | None = Form(default=None),
     ):
-        """Upload a mission file to mpmissions and register its metadata."""
+        """Upload a mission file to mpmissions and register its metadata.
+        
+        Each upload must be unique. If a file with identical content (same hash) 
+        already exists, the upload is rejected.
+        """
         try:
             if not file.filename:
                 raise HTTPException(status_code=400, detail="missing filename")
@@ -282,16 +292,32 @@ def create_app(settings: Settings) -> FastAPI:
             safe_name = Path(file.filename).name
             dest_path = dest_dir / safe_name
 
+            # Write file and compute hash
             with dest_path.open("wb") as f:
                 shutil.copyfileobj(file.file, f)
+            
+            file_hash = _compute_file_hash(dest_path)
+            
+            # Check for duplicate (same file hash)
+            existing_missions = _load_missions_index()
+            for mission in existing_missions:
+                if mission.get("fileHash") == file_hash:
+                    # Duplicate found - clean up temp file and return error
+                    dest_path.unlink(missing_ok=True)
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"Mission '{mission.get('name')}' with identical content already exists (ID: {mission.get('id')})"
+                    )
 
             mission_name = missionName or Path(safe_name).stem
             config_hash = _compute_config_hash(configName)
             now = datetime.now(timezone.utc).isoformat()
 
             entry = {
+                "id": str(uuid.uuid4()),
                 "name": mission_name,
                 "file": safe_name,
+                "fileHash": file_hash,
                 "configName": configName,
                 "configHash": config_hash,
                 "description": description,

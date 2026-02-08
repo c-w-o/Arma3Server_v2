@@ -7,6 +7,7 @@ export function createMissionsContent() {
     // State
     let selectedConfig = null;
     let selectedMission = null;
+    let selectedMissionData = null;
     let allConfigs = [];
     let missions = [];
     let updateItems = [];
@@ -36,6 +37,7 @@ export function createMissionsContent() {
     configSelect.on("change", async () => {
         selectedConfig = configSelect.getValue();
         selectedMission = null;
+        selectedMissionData = null;
         missionList.el.innerHTML = "";
         detailsSection.setStyle({ display: "none" });
         updateItems = [];
@@ -48,9 +50,11 @@ export function createMissionsContent() {
         if (selectedConfig) {
             await loadMissionsForConfig(selectedConfig);
             missionSection.setStyle({ display: "block" });
+            uploadSection.setStyle({ display: "block" });
             updateSection.setStyle({ display: "block" });
         } else {
             missionSection.setStyle({ display: "none" });
+            uploadSection.setStyle({ display: "none" });
             updateSection.setStyle({ display: "none" });
         }
     });
@@ -100,6 +104,53 @@ export function createMissionsContent() {
 
     updateSection.add(updateActions, updateSummary, updateProgressWrap, updatesList);
     container.add(updateSection);
+
+    // ===== Mission Upload Section =====
+    const uploadSection = new UI.VDiv({ gap: 12 });
+    uploadSection.setStyle({
+        background: "var(--ui-color-surface)",
+        border: "1px solid var(--ui-color-border)",
+        borderRadius: "var(--ui-radius-md)",
+        padding: "16px",
+        display: "none"
+    });
+
+    uploadSection.add(
+        new UI.Heading("3. Mission hochladen", { level: 4 }).setStyle({ margin: "0 0 8px 0" })
+    );
+
+    const uploadHelp = new UI.Text("Lade eine .pbo Mission hoch und verknüpfe sie mit der ausgewählten Konfiguration.");
+    uploadHelp.setStyle({ fontSize: "0.85em", color: "var(--ui-color-text-muted)" });
+
+    const uploadFileRow = new UI.HDiv({ gap: 8, align: "stretch" });
+    const missionFileInput = document.createElement("input");
+    missionFileInput.type = "file";
+    missionFileInput.accept = ".pbo,.zip";
+    missionFileInput.style.flex = "1";
+    missionFileInput.style.padding = "8px";
+
+    const uploadBtn = new UI.Button("📤 Mission hochladen");
+    uploadBtn.setStyle({ padding: "8px 16px" });
+
+    uploadFileRow.add(missionFileInput, uploadBtn);
+
+    const uploadMetaRow = new UI.HDiv({ gap: 8, align: "stretch" });
+    const missionNameInput = document.createElement("input");
+    missionNameInput.type = "text";
+    missionNameInput.placeholder = "Mission name (optional)";
+    missionNameInput.style.flex = "1";
+    missionNameInput.style.padding = "8px";
+
+    const missionDescInput = new UI.TextArea("", { placeholder: "Beschreibung (optional)", rows: 2 });
+    missionDescInput.setStyle({ flex: "2" });
+
+    uploadMetaRow.add(missionNameInput, missionDescInput);
+
+    const uploadStatus = new UI.Text("");
+    uploadStatus.setStyle({ fontSize: "0.85em", color: "var(--ui-color-text-muted)" });
+
+    uploadSection.add(uploadHelp, uploadMetaRow, uploadFileRow, uploadStatus);
+    container.add(uploadSection);
     
     // ===== Missions Section =====
     const missionSection = new UI.VDiv({ gap: 12 });
@@ -136,8 +187,15 @@ export function createMissionsContent() {
     
     const missionTitle = new UI.Heading("", { level: 4 }).setStyle({ margin: "0 0 8px 0" });
     const missionDesc = new UI.Text("");
+    const missionFileInfo = new UI.Text("").setStyle({ fontSize: "0.85em", color: "var(--ui-color-text-muted)" });
+    const missionUploadedInfo = new UI.Text("").setStyle({ fontSize: "0.85em", color: "var(--ui-color-text-muted)" });
     const requiredModsList = new UI.VDiv({ gap: 4 });
-    const uploadArea = new UI.VDiv({ gap: 8 });
+    const metaEditor = new UI.VDiv({ gap: 8 });
+
+    const metaDescInput = new UI.TextArea("", { placeholder: "Beschreibung (optional)", rows: 3 });
+    metaDescInput.setStyle({ width: "100%" });
+    const saveMetaBtn = new UI.Button("💾 Metadaten speichern");
+    const saveMetaStatus = new UI.Text("").setStyle({ fontSize: "0.85em", color: "var(--ui-color-text-muted)" });
     
     const startBtn = new UI.Button("✓ Starten").setStyle({ 
         padding: "10px 20px", 
@@ -165,10 +223,12 @@ export function createMissionsContent() {
     detailsSection.add(
         missionTitle,
         missionDesc,
+        missionFileInfo,
+        missionUploadedInfo,
         new UI.Heading("Benötigte Mods", { level: 5 }).setStyle({ margin: "8px 0 4px 0" }),
         requiredModsList,
-        new UI.Heading("Custom Mods", { level: 5 }).setStyle({ margin: "16px 0 8px 0" }),
-        uploadArea,
+        new UI.Heading("Metadaten bearbeiten", { level: 5 }).setStyle({ margin: "16px 0 8px 0" }),
+        metaEditor,
         new UI.HDiv({ gap: 8, align: "center" }).add(startBtn, cancelBtn)
     );
     
@@ -206,6 +266,7 @@ export function createMissionsContent() {
             missions = Array.isArray(resp.missions) ? resp.missions : [];
             
             displayMissionsList();
+            return missions;
         } catch (err) {
             console.error("Failed to load missions:", err);
             missionList.el.innerHTML = "";
@@ -213,7 +274,34 @@ export function createMissionsContent() {
                 new UI.Text(`❌ Fehler beim Laden der Missionen: ${err.message}`)
                     .setStyle({ color: "var(--ui-color-error)" })
             );
+            return [];
         }
+    }
+
+    function _extractModId(input) {
+        if (!input) return null;
+        const urlMatch = input.match(/id=(\d+)/);
+        if (urlMatch) return urlMatch[1];
+        if (/^\d+$/.test(input)) return input;
+        const looseMatch = input.match(/(\d{6,})/);
+        return looseMatch ? looseMatch[1] : null;
+    }
+
+    function _parseModIds(text) {
+        const lines = String(text || "")
+            .split("\n")
+            .map(l => l.trim())
+            .filter(l => l.length > 0);
+        const ids = [];
+        const seen = new Set();
+        for (const line of lines) {
+            const id = _extractModId(line);
+            if (id && !seen.has(id)) {
+                seen.add(id);
+                ids.push(id);
+            }
+        }
+        return ids;
     }
 
     function formatEpoch(ts) {
@@ -469,6 +557,67 @@ export function createMissionsContent() {
     updateBtn.onClick(() => {
         runModUpdates();
     });
+
+    uploadBtn.onClick(async () => {
+        if (!selectedConfig) {
+            alert("Bitte zuerst eine Konfiguration auswählen");
+            return;
+        }
+        const file = missionFileInput.files[0];
+        if (!file) {
+            alert("Bitte eine Mission-Datei auswählen");
+            return;
+        }
+
+        uploadBtn.setDisabled(true);
+        uploadStatus.setText("Upload läuft...");
+
+        try {
+            const missionName = missionNameInput.value.trim();
+            const description = missionDescInput.el.value.trim();
+            const resp = await apiClient.uploadMission({
+                file,
+                configName: selectedConfig,
+                missionName: missionName || undefined,
+                description: description || undefined
+            });
+
+            if (!resp.ok) {
+                // Handle 409 conflict - duplicate file
+                if (resp.status === 409) {
+                    throw new Error(resp.detail || "Mission mit identischem Inhalt existiert bereits");
+                }
+                throw new Error(resp.detail || "Upload fehlgeschlagen");
+            }
+
+            uploadStatus.setText(`✅ Mission hochgeladen: ${resp.mission?.name || file.name}`);
+            missionFileInput.value = "";
+            missionNameInput.value = "";
+            missionDescInput.setValue("");
+
+            await loadMissionsForConfig(selectedConfig);
+        } catch (err) {
+            uploadStatus.setText(`❌ ${err.message}`);
+        } finally {
+            uploadBtn.setDisabled(false);
+        }
+    });
+    
+    function formatUploadDate(isoString) {
+        if (!isoString) return "Datum unbekannt";
+        try {
+            const date = new Date(isoString);
+            return date.toLocaleDateString("de-DE", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit"
+            });
+        } catch (e) {
+            return "Datum unbekannt";
+        }
+    }
     
     function displayMissionsList() {
         missionList.el.innerHTML = "";
@@ -521,6 +670,10 @@ export function createMissionsContent() {
                         ? "var(--ui-color-text-muted)" 
                         : "var(--ui-color-warning, #FF9800)",
                     fontWeight: compatible ? "normal" : "bold"
+                }),
+                new UI.Text(`📅 ${formatUploadDate(mission.uploadedAt)}`).setStyle({
+                    fontSize: "0.75em",
+                    color: "var(--ui-color-text-muted)"
                 })
             );
             if (hashMismatch) {
@@ -537,6 +690,7 @@ export function createMissionsContent() {
             
             missionCard.el.addEventListener("click", () => {
                 selectedMission = mission.name;
+                selectedMissionData = mission;
                 displayMissionsList();
                 displayMissionDetails(mission);
                 detailsSection.setStyle({ display: "block" });
@@ -549,6 +703,10 @@ export function createMissionsContent() {
     function displayMissionDetails(mission) {
         missionTitle.setText(mission.name);
         missionDesc.setText(mission.description || "(keine Beschreibung)");
+        missionFileInfo.setText(`Datei: ${mission.file || "—"}`);
+        missionUploadedInfo.setText(`Uploaded: ${mission.uploadedAt || "—"}`);
+
+        metaDescInput.setValue(mission.description || "");
 
         const requiredMods = Array.isArray(mission.requiredMods) ? mission.requiredMods : [];
         const optionalMods = Array.isArray(mission.optionalMods) ? mission.optionalMods : [];
@@ -615,44 +773,47 @@ export function createMissionsContent() {
             );
         }
         
-        // Upload area
-        uploadArea.el.innerHTML = "";
-        const uploadContainer = new UI.VDiv({ gap: 8 });
-        uploadContainer.setStyle({
-            border: "2px dashed var(--ui-color-border)",
-            borderRadius: "var(--ui-radius-md)",
-            padding: "16px",
-            textAlign: "center",
-            cursor: "pointer",
-            transition: "all 0.2s"
-        });
-        
-        uploadContainer.add(
-            new UI.Text("📤 Custom Mods hierher ziehen oder klicken").setStyle({
-                fontWeight: "600",
-                fontSize: "0.95em"
-            }),
-            new UI.Text(`(für ${mission.name} + ${selectedConfig})`).setStyle({
-                fontSize: "0.85em",
-                color: "var(--ui-color-text-muted)"
-            })
+        metaEditor.el.innerHTML = "";
+        metaEditor.add(
+            new UI.Text("Beschreibung:").setStyle({ fontSize: "0.85em", fontWeight: "600" }),
+            metaDescInput,
+            new UI.HDiv({ gap: 8, align: "center" }).add(saveMetaBtn, saveMetaStatus)
         );
-        
-        uploadContainer.el.addEventListener("click", () => {
-            alert(`Upload würde starten:\nConfig: ${selectedConfig}\nMission: ${mission.name}`);
-        });
-        
-        uploadContainer.el.addEventListener("dragover", (e) => {
-            e.preventDefault();
-            uploadContainer.setStyle({ background: "rgba(var(--ui-color-nav-active), 0.1)" });
-        });
-        
-        uploadContainer.el.addEventListener("dragleave", () => {
-            uploadContainer.setStyle({ background: "" });
-        });
-        
-        uploadArea.add(uploadContainer);
     }
+
+    saveMetaBtn.onClick(async () => {
+        if (!selectedConfig || !selectedMissionData) return;
+
+        saveMetaBtn.setDisabled(true);
+        saveMetaStatus.setText("Speichern...");
+
+        try {
+            const payload = {
+                name: selectedMissionData.name,
+                file: selectedMissionData.file || undefined,
+                configName: selectedConfig,
+                description: metaDescInput.el.value.trim() || undefined
+            };
+
+            const resp = await apiClient.saveMissionMeta(payload);
+            if (!resp.ok) throw new Error(resp.detail || "Speichern fehlgeschlagen");
+
+            saveMetaStatus.setText("✅ Gespeichert");
+
+            const updatedList = await loadMissionsForConfig(selectedConfig);
+            const updated = updatedList.find(m => m.name === selectedMissionData.name) || updatedList.find(m => m.file === selectedMissionData.file);
+            if (updated) {
+                selectedMission = updated.name;
+                selectedMissionData = updated;
+                displayMissionDetails(updated);
+                detailsSection.setStyle({ display: "block" });
+            }
+        } catch (err) {
+            saveMetaStatus.setText(`❌ Fehler: ${err.message}`);
+        } finally {
+            saveMetaBtn.setDisabled(false);
+        }
+    });
     
     // Initial load
     loadConfigs();

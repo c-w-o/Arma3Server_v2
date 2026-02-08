@@ -39,7 +39,7 @@ export function createModsContent() {
 
     const downloadRow = new UI.HDiv({ gap: 8, align: "stretch" });
 
-    const downloadAllBtn = new UI.Button("⬇ Download Alle Mods (ohne Server)");
+    const downloadAllBtn = new UI.Button("⬇ Download Mod Preset (mit optionalen Mods)");
     downloadAllBtn.setStyle({ flex: "1", padding: "10px" });
     downloadAllBtn.onClick(() => {
         if (!currentPresetConfig) {
@@ -49,7 +49,7 @@ export function createModsContent() {
         window.location.href = `/config/${currentPresetConfig}/preset-all.html`;
     });
 
-    const downloadBaseBtn = new UI.Button("⬇ Download Mods & Maps");
+    const downloadBaseBtn = new UI.Button("⬇ Download Mod Preset (nur Pflicht)");
     downloadBaseBtn.setStyle({ flex: "1", padding: "10px" });
     downloadBaseBtn.onClick(() => {
         if (!currentPresetConfig) {

@@ -278,7 +278,74 @@ Each category has:
 
 ### Missions Tab
 
-*(To be documented)*
+The **Missions** tab allows you to manage mission files (.pbo), check mod compatibility, and track mod updates for your server.
+
+#### What it does
+
+- **Select a configuration** to manage missions and updates for that specific config.
+- **Upload mission files** (.pbo or .zip) with optional descriptions.
+- **Check for mod updates** in uploaded missions and apply them selectively.
+- **View all uploaded missions** with compatibility status and upload dates.
+- **Edit mission metadata** (description only; mod lists are informational and stored separately).
+
+#### Sections
+
+**1. Configuration Selection**
+- Dropdown selector that enables all sections below.
+- Each mission is tied to a specific configuration, allowing different missions for different configs.
+
+**2. Mod Updates**
+- **🔍 Check for Updates**: Scans all Workshop mods in the configuration for available updates.
+- **Select All / Select None**: Quickly select/deselect mods to update.
+- **⬇ Update starten**: Downloads and applies selected mod updates sequentially.
+- **Progress bar**: Shows current mod name and update progress (e.g., "Update: ModName (3/7)").
+
+#### Key Rules for Unique Missions
+
+**Mission Uniqueness** is based on **file content (SHA256 hash)**, not file name:
+- ✅ You **can** upload multiple missions with the **same name** to the same config (they get unique IDs).
+- ❌ You **cannot** upload a mission with **identical content** twice (detected by file hash).
+  - If duplicate content is detected, the upload is rejected with a message showing the existing mission's name and ID.
+- Missions are always timestamped with upload date/time for easy identification.
+
+#### Sections Detail
+
+**Mission Upload**
+- **Select file**: Choose a .pbo or .zip mission file.
+- **Mission name** (optional): Provide a custom name; if not given, the filename (without extension) is used.
+- **Description** (optional): Add notes about the mission (e.g., "PvP with custom gear" or "Coop 6-player").
+- **Upload button**: Uploads the file and registers it to the selected configuration.
+
+**Mission List & Compatibility**
+- Each mission card shows:
+  - **Name** and **Description**
+  - **Status icon**: ✓ (green) if all required mods are present, ⚠ (orange) if mods are missing.
+  - **Mod count**: Number of required + optional mods (for reference/documentation only).
+  - **Upload date**: When the mission was uploaded (e.g., "2 Feb 2026, 14:23").
+  - **Config mismatch warning**: ⚠️ if the configuration has changed since the mission was uploaded.
+- Click a mission card to view or edit its metadata.
+
+**Mission Details & Metadata Editor**
+- Displays the selected mission's full information.
+- **Description editor**: Edit the mission description and save changes.
+- Changes are stored in the missions index and persist across server restarts.
+
+#### Typical workflow
+
+1. **Select a configuration** from the dropdown.
+2. **Upload a mission** file (.pbo) with an optional name and description.
+   - If the file already exists (identical hash), the upload is rejected.
+3. **Check for mod updates** by clicking "🔍 Aktualität prüfen".
+4. **Select which mods to update** (outdated mods are pre-selected).
+5. **Start the update** to download all selected mod versions.
+6. **View uploaded missions** in the list below; click to see full details and edit descriptions.
+
+#### Notes
+
+- **Mission metadata** (name, description, mod references) is stored separately from the `.pbo` file in `missions.json`.
+- **Mod compatibility** is checked against the configuration's Workshop mods; it is informational only.
+- **Upload dates** help you track when missions were added; useful for audit trails and version management.
+- If a mission becomes incompatible due to configuration changes, you'll see a warning. You can update required mods and refresh to resolve it.
 
 ### Mods Tab
 

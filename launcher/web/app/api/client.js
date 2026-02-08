@@ -141,6 +141,38 @@ export class LauncherApiClient {
     return resp;
   }
 
+  async saveMissionMeta(payload) {
+    this._ensureObject(payload, "MissionMetaPayload");
+    const resp = await this.rest.post("/missions", payload);
+    return resp;
+  }
+
+  async uploadMission({ file, configName, missionName, description }) {
+    if (!file) throw new Error("file is required");
+    if (!configName) throw new Error("configName is required");
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("configName", configName);
+    if (missionName) formData.append("missionName", missionName);
+    if (description) formData.append("description", description);
+
+    const resp = await fetch("/missions/upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!resp.ok) {
+      let err = null;
+      try {
+        err = await resp.json();
+      } catch {
+        err = null;
+      }
+      return { ok: false, detail: err?.detail || `Upload failed (${resp.status})` };
+    }
+    return await resp.json();
+  }
+
   // ========== Workshop Updates ==========
 
   async getWorkshopUpdates(configName) {
