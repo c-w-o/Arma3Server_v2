@@ -148,33 +148,9 @@ export function createDashboardContent() {
     
     async function loadMissionsForConfig(configName) {
         try {
-            // For now: Mock mission data
-            // Later: fetch from /api/missions or extract from config
-            missions = [
-                {
-                    name: "Antistasi",
-                    description: "Insurgency-style campaign against occupation",
-                    requiredMods: [
-                        { id: 843577117, name: "RHS USAF" },
-                        { id: 450814997, name: "CBA_A3" }
-                    ]
-                },
-                {
-                    name: "Combat Patrol",
-                    description: "Cooperative tactical missions",
-                    requiredMods: [
-                        { id: 450814997, name: "CBA_A3" }
-                    ]
-                },
-                {
-                    name: "Liberation",
-                    description: "RTS-style campaign",
-                    requiredMods: [
-                        { id: 843577117, name: "RHS USAF" },
-                        { id: 843425103, name: "RHS AFRF" }
-                    ]
-                }
-            ];
+            const resp = await apiClient.getMissions(configName);
+            if (!resp.ok) throw new Error(resp.detail || "Failed to load missions");
+            missions = Array.isArray(resp.missions) ? resp.missions : [];
             
             displayMissionsList();
         } catch (err) {
@@ -201,8 +177,11 @@ export function createDashboardContent() {
         }
         
         missions.forEach(mission => {
+            const requiredMods = Array.isArray(mission.requiredMods) ? mission.requiredMods : [];
+            const optionalMods = Array.isArray(mission.optionalMods) ? mission.optionalMods : [];
             const configMods = allConfigs.find(c => c.name === selectedConfig)?.workshop?.mods || [];
-            const compatible = mission.requiredMods.every(m => configMods.some(c => c.id === m.id));
+            const compatible = requiredMods.every(m => configMods.some(c => c.id === m.id));
+            const hashMismatch = mission.configHashMatch === false;
             
             const missionCard = new UI.HDiv({ gap: 12, align: "center" });
             missionCard.setStyle({
@@ -225,11 +204,11 @@ export function createDashboardContent() {
             const infoDiv = new UI.VDiv({ gap: 2 }).setStyle({ flex: "1" });
             infoDiv.add(
                 new UI.Heading(mission.name, { level: 5 }).setStyle({ margin: "0" }),
-                new UI.Text(mission.description).setStyle({ 
+                new UI.Text(mission.description || "(keine Beschreibung)").setStyle({ 
                     fontSize: "0.85em", 
                     color: "var(--ui-color-text-muted)" 
                 }),
-                new UI.Text(`${mission.requiredMods.length} benötigte Mods`).setStyle({ 
+                new UI.Text(`${requiredMods.length} benötigte Mods${optionalMods.length ? `, ${optionalMods.length} optional` : ""}`).setStyle({ 
                     fontSize: "0.8em", 
                     color: compatible 
                         ? "var(--ui-color-text-muted)" 
@@ -237,6 +216,15 @@ export function createDashboardContent() {
                     fontWeight: compatible ? "normal" : "bold"
                 })
             );
+            if (hashMismatch) {
+                infoDiv.add(
+                    new UI.Text("⚠️ Config wurde seit Upload geändert").setStyle({
+                        fontSize: "0.8em",
+                        color: "var(--ui-color-warning, #FF9800)",
+                        fontWeight: "bold"
+                    })
+                );
+            }
             
             missionCard.add(statusIcon, infoDiv);
             
@@ -253,11 +241,14 @@ export function createDashboardContent() {
     
     function displayMissionDetails(mission) {
         missionTitle.setText(mission.name);
-        missionDesc.setText(mission.description);
+        missionDesc.setText(mission.description || "(keine Beschreibung)");
+
+        const requiredMods = Array.isArray(mission.requiredMods) ? mission.requiredMods : [];
+        const optionalMods = Array.isArray(mission.optionalMods) ? mission.optionalMods : [];
         
         // Required mods list
         requiredModsList.el.innerHTML = "";
-        if (mission.requiredMods.length === 0) {
+        if (requiredMods.length === 0) {
             requiredModsList.add(
                 new UI.Text("Keine speziellen Anforderungen").setStyle({ 
                     color: "var(--ui-color-text-muted)" 
@@ -267,7 +258,7 @@ export function createDashboardContent() {
             const modsList = new UI.VDiv({ gap: 3 });
             const configMods = allConfigs.find(c => c.name === selectedConfig)?.workshop?.mods || [];
             
-            mission.requiredMods.forEach(mod => {
+            requiredMods.forEach(mod => {
                 const isMissing = !configMods.some(m => m.id === mod.id);
                 
                 const modRow = new UI.HDiv({ gap: 8, align: "center" }).setStyle({
@@ -290,6 +281,31 @@ export function createDashboardContent() {
                 modsList.add(modRow);
             });
             requiredModsList.add(modsList);
+        }
+
+        if (optionalMods.length > 0) {
+            const optionalTitle = new UI.Text("Optionale Mods:").setStyle({
+                marginTop: "8px",
+                fontSize: "0.85em",
+                fontWeight: "600"
+            });
+            const optionalList = new UI.VDiv({ gap: 2 });
+            optionalMods.forEach(mod => {
+                optionalList.add(
+                    new UI.Text(`• ${mod.name || "Mod"} (${mod.id})`).setStyle({
+                        fontSize: "0.85em",
+                        color: "var(--ui-color-text-muted)"
+                    })
+                );
+            });
+            requiredModsList.add(optionalTitle, optionalList);
+        }
+
+        if (mission.configHashMatch === false) {
+            requiredModsList.add(
+                new UI.Text("⚠️ Die zugewiesene Konfiguration wurde seit Upload geändert.")
+                    .setStyle({ fontSize: "0.85em", color: "var(--ui-color-warning, #FF9800)", fontWeight: "bold" })
+            );
         }
         
         // Upload area
@@ -316,7 +332,7 @@ export function createDashboardContent() {
         );
         
         uploadContainer.el.addEventListener("click", () => {
-            alert(`Upload würde startenfor:\nConfig: ${selectedConfig}\nMission: ${mission.name}`);
+            alert(`Upload würde starten:\nConfig: ${selectedConfig}\nMission: ${mission.name}`);
         });
         
         uploadContainer.el.addEventListener("dragover", (e) => {

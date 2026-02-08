@@ -33,7 +33,7 @@ RUN python3 -m venv /opt/venv \
       fastapi uvicorn \
       pydantic pydantic-settings \
       pytest pytest-cov httpx \
-      python-dotenv
+      python-dotenv python-multipart
       
 ENV PATH="/opt/venv/bin:${PATH}"
 

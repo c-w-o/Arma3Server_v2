@@ -1,14 +1,17 @@
 from __future__ import annotations
-from typing import Optional
-from fastapi import FastAPI, HTTPException, Query, Body
+from typing import Optional, List
+from fastapi import FastAPI, HTTPException, Query, Body, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from starlette.responses import Response, JSONResponse
 from starlette.requests import Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pathlib import Path
+from hashlib import sha256
+from datetime import datetime, timezone
+import shutil
 import json
 from jsonschema import validate, RefResolver
 from jsonschema.exceptions import ValidationError
@@ -25,6 +28,20 @@ class ActionResult(BaseModel):
     ok: bool
     detail: str | None = None
     data: dict | None = None
+
+
+class MissionModEntry(BaseModel):
+    id: int
+    name: str | None = None
+
+
+class MissionMetaPayload(BaseModel):
+    name: str
+    file: str | None = None
+    configName: str
+    description: str | None = None
+    requiredMods: List[MissionModEntry] = Field(default_factory=list)
+    optionalMods: List[MissionModEntry] = Field(default_factory=list)
 
 class DefaultsUpdatePayload(BaseModel):
     mods: Optional[FileConfig_Mods] = None
@@ -125,6 +142,52 @@ def create_app(settings: Settings) -> FastAPI:
 
     # Initialize Variants API for new variant-based configuration
     config_layout = ConfigLayout(orch.layout.inst_config)
+
+    # --- Missions metadata ---
+    missions_index_path = config_layout.root / "missions.json"
+
+    def _load_missions_index() -> list[dict]:
+        if not missions_index_path.exists():
+            return []
+        try:
+            raw = json.loads(missions_index_path.read_text(encoding="utf-8"))
+        except Exception:
+            return []
+        if isinstance(raw, dict):
+            raw = raw.get("missions", [])
+        if not isinstance(raw, list):
+            return []
+        return [m for m in raw if isinstance(m, dict)]
+
+    def _save_missions_index(missions: list[dict]) -> None:
+        missions_index_path.parent.mkdir(parents=True, exist_ok=True)
+        missions_index_path.write_text(
+            json.dumps({"missions": missions}, indent=2),
+            encoding="utf-8",
+        )
+
+    def _compute_config_hash(config_name: str) -> str:
+        defaults = orch.store.load_defaults()
+        override = orch.store.load_override(config_name)
+        merged = orch.merger.merge(defaults, override)
+        payload = merged.model_dump(mode="json", by_alias=True, exclude_none=True)
+        blob = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        return sha256(blob).hexdigest()
+
+    def _upsert_mission(meta: dict) -> None:
+        missions = _load_missions_index()
+        name = meta.get("name")
+        file_name = meta.get("file")
+        updated = False
+        for idx, existing in enumerate(missions):
+            if (name and existing.get("name") == name) or (file_name and existing.get("file") == file_name):
+                merged = {**existing, **meta}
+                missions[idx] = merged
+                updated = True
+                break
+        if not updated:
+            missions.append(meta)
+        _save_missions_index(missions)
     if app_root.exists():
         app.mount("/app", NoCacheStaticFiles(directory=str(app_root), html=True), name="app")
     if kit_root.exists():
@@ -141,6 +204,108 @@ def create_app(settings: Settings) -> FastAPI:
     @app.get("/health")
     def health():
         return {"ok": True}
+
+    @app.get("/missions")
+    def list_missions(config: str | None = Query(default=None)):
+        """List uploaded missions and their associated config hash state."""
+        missions = _load_missions_index()
+        hash_cache: dict[str, Optional[str]] = {}
+        enriched: list[dict] = []
+
+        for m in missions:
+            entry = dict(m)
+            cfg_name = entry.get("configName")
+            current_hash = None
+            if cfg_name:
+                if cfg_name not in hash_cache:
+                    try:
+                        hash_cache[cfg_name] = _compute_config_hash(cfg_name)
+                    except Exception:
+                        hash_cache[cfg_name] = None
+                current_hash = hash_cache[cfg_name]
+                entry["configHashCurrent"] = current_hash
+                if entry.get("configHash") and current_hash:
+                    entry["configHashMatch"] = entry.get("configHash") == current_hash
+                else:
+                    entry["configHashMatch"] = None
+            enriched.append(entry)
+
+        if config:
+            enriched = [m for m in enriched if m.get("configName") == config]
+
+        return {"ok": True, "missions": enriched}
+
+    @app.post("/missions")
+    def save_mission_meta(payload: MissionMetaPayload):
+        """Create or update mission metadata (without file upload)."""
+        try:
+            if payload.configName not in orch.store.list_configs():
+                raise HTTPException(status_code=404, detail=f"config '{payload.configName}' not found")
+            config_hash = _compute_config_hash(payload.configName)
+            now = datetime.now(timezone.utc).isoformat()
+
+            entry = payload.model_dump(mode="json")
+            entry["configHash"] = config_hash
+            entry["uploadedAt"] = entry.get("uploadedAt") or now
+            entry["modifiedBy"] = "api"
+
+            _upsert_mission(entry)
+            return {"ok": True, "mission": entry}
+        except HTTPException:
+            raise
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            print(f"Error saving mission metadata: {tb}")
+            raise HTTPException(status_code=500, detail=f"Error saving mission: {str(e)}")
+
+    @app.post("/missions/upload")
+    async def upload_mission(
+        file: UploadFile = File(...),
+        configName: str = Form(...),
+        missionName: str | None = Form(default=None),
+        description: str | None = Form(default=None),
+    ):
+        """Upload a mission file to mpmissions and register its metadata."""
+        try:
+            if not file.filename:
+                raise HTTPException(status_code=400, detail="missing filename")
+            if configName not in orch.store.list_configs():
+                raise HTTPException(status_code=404, detail=f"config '{configName}' not found")
+
+            dest_dir = orch.layout.inst_mpmissions
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            safe_name = Path(file.filename).name
+            dest_path = dest_dir / safe_name
+
+            with dest_path.open("wb") as f:
+                shutil.copyfileobj(file.file, f)
+
+            mission_name = missionName or Path(safe_name).stem
+            config_hash = _compute_config_hash(configName)
+            now = datetime.now(timezone.utc).isoformat()
+
+            entry = {
+                "name": mission_name,
+                "file": safe_name,
+                "configName": configName,
+                "configHash": config_hash,
+                "description": description,
+                "uploadedAt": now,
+                "modifiedBy": "upload",
+                "requiredMods": [],
+                "optionalMods": [],
+            }
+
+            _upsert_mission(entry)
+            return {"ok": True, "mission": entry}
+        except HTTPException:
+            raise
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            print(f"Error uploading mission: {tb}")
+            raise HTTPException(status_code=500, detail=f"Error uploading mission: {str(e)}")
 
     @app.get("/configs")
     def list_configs():

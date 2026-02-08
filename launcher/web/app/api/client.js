@@ -35,6 +35,7 @@ export class LauncherApiClient {
         actionResult: UI.makeValidator(schemasJson.properties.ActionResult),
         resolveModsRequest: UI.makeValidator(schemasJson.properties.ResolveModsRequest),
         resolveModsResponse: UI.makeValidator(schemasJson.properties.ResolveModsResponse),
+        missionsResponse: UI.makeValidator(schemasJson.properties.MissionsResponse),
       };
       this.schemasLoaded = true;
     } catch (err) {
@@ -49,6 +50,7 @@ export class LauncherApiClient {
         actionResult: () => ({ ok: true, errors: [], warning: "Schemas not loaded" }),
         resolveModsRequest: () => ({ ok: true, errors: [], warning: "Schemas not loaded" }),
         resolveModsResponse: () => ({ ok: true, errors: [], warning: "Schemas not loaded" }),
+        missionsResponse: () => ({ ok: true, errors: [], warning: "Schemas not loaded" }),
       };
     }
   }
@@ -129,6 +131,13 @@ export class LauncherApiClient {
     this._validateRequest("resolveModsRequest", payload, "POST /resolve-mod-ids request");
     const resp = await this.rest.post("/resolve-mod-ids", payload);
     this._validateResponse("resolveModsResponse", resp, "POST /resolve-mod-ids response");
+    return resp;
+  }
+
+  async getMissions(configName = null) {
+    const query = configName ? `?config=${encodeURIComponent(configName)}` : "";
+    const resp = await this.rest.get(`/missions${query}`);
+    this._validateResponse("missionsResponse", resp, "GET /missions response");
     return resp;
   }
 

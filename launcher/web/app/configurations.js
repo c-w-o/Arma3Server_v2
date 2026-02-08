@@ -285,14 +285,47 @@ export function createConfigurationsContent() {
     function _buildModsTable(title, modsObj) {
         const rows = [];
         const modDetailMap = new Map(); // Map category -> items for later lookup
+        const displayedIds = new Set(); // Dedupe über Kategorien hinweg
         
-        for (const [category, items] of Object.entries(modsObj)) {
+        // Kategorien in fester Reihenfolge (höchste Prio zuerst)
+        const categoryOrder = ["serverMods", "baseMods", "clientMods", "maps", "missionMods"];
+        
+        for (const category of categoryOrder) {
+            const items = modsObj[category];
             if (items && items.length > 0) {
-                modDetailMap.set(category, items);
-                rows.push({
-                    category,
-                    count: items.length
-                });
+                // Filtere bereits angezeigte Mods aus
+                const uniqueItems = items.filter(mod => !displayedIds.has(mod.id));
+                
+                // Merke IDs für zukünftige Kategorien
+                for (const mod of items) {
+                    displayedIds.add(mod.id);
+                }
+                
+                modDetailMap.set(category, uniqueItems);
+                
+                if (uniqueItems.length > 0) {
+                    rows.push({
+                        category,
+                        count: uniqueItems.length
+                    });
+                }
+            }
+        }
+        
+        // Restliche Kategorien (falls vorhanden, aber nicht in categoryOrder)
+        for (const [category, items] of Object.entries(modsObj)) {
+            if (!categoryOrder.includes(category) && items && items.length > 0) {
+                const uniqueItems = items.filter(mod => !displayedIds.has(mod.id));
+                for (const mod of items) {
+                    displayedIds.add(mod.id);
+                }
+                modDetailMap.set(category, uniqueItems);
+                if (uniqueItems.length > 0) {
+                    rows.push({
+                        category,
+                        count: uniqueItems.length
+                    });
+                }
             }
         }
         

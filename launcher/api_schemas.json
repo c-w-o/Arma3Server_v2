@@ -27,6 +27,35 @@
       }
     },
 
+    "missionModEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "integer" },
+        "name": { "type": ["string", "null"] }
+      }
+    },
+
+    "missionEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "configName"],
+      "properties": {
+        "name": { "type": "string" },
+        "file": { "type": ["string", "null"] },
+        "configName": { "type": "string" },
+        "configHash": { "type": ["string", "null"] },
+        "configHashCurrent": { "type": ["string", "null"] },
+        "configHashMatch": { "type": ["boolean", "null"] },
+        "description": { "type": ["string", "null"] },
+        "uploadedAt": { "type": ["string", "null"] },
+        "modifiedBy": { "type": ["string", "null"] },
+        "requiredMods": { "type": "array", "items": { "$ref": "#/$defs/missionModEntry" } },
+        "optionalMods": { "type": "array", "items": { "$ref": "#/$defs/missionModEntry" } }
+      }
+    },
+
     "dlcFlags": {
       "type": "object",
       "additionalProperties": false,
@@ -324,6 +353,16 @@
           "additionalProperties": { "$ref": "#/$defs/resolveMod" }
         }
       }
+    },
+
+    "MissionsResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "missions"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "missions": { "type": "array", "items": { "$ref": "#/$defs/missionEntry" } }
+      }
     }
   },
 
@@ -336,6 +375,7 @@
     "DefaultsUpdateRequest",
     "ConfigOverrideRequest",
     "ResolveModsRequest",
-    "ResolveModsResponse"
+    "ResolveModsResponse",
+    "MissionsResponse"
   ]
 }
