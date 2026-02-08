@@ -9,6 +9,7 @@ export const A3CL_VERSION = `${A3CL_MAJOR}.${A3CL_MINOR}.${A3CL_PATCH}`;
 import * as UI from "/ui-kit-0/src/ui-kit-0.js";
 import { createDashboardContent } from "./dashboard.js";
 import { createConfigurationsContent } from "./configurations.js";
+import { createMissionsContent } from "./missions.js";
 import { createModsContent } from "./mods.js";
 import { createLogsContent } from "./logs.js";
 import { createMonitoringContent } from "./monitoring.js";
@@ -93,6 +94,7 @@ middle_banner.setStyle({ flex: "1", overflow: "auto" });
     const pages = [
         { id: "dashboard", label: "Dashboard", content: createDashboardContent },
         { id: "configurations", label: "Konfigurationen", content: createConfigurationsContent },
+        { id: "missions", label: "Missionen", content: createMissionsContent },
         { id: "mods", label: "Mods", content: createModsContent },
         { id: "logs", label: "Logs", content: createLogsContent },
         { id: "monitoring", label: "Monitoring", content: createMonitoringContent },

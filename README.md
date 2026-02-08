@@ -1,76 +1,356 @@
-# Arma3Server_v2
+# Arma 3 Control Launcher (A3CL)
 
-Arma3Server_v2 is a lightweight, Docker-friendly Arma 3 dedicated server launcher.  
-It automates Arma 3 server startup, headless client orchestration, Steam Workshop mod downloads (via SteamCMD), optional DLC/install handling, logging, and resilient SteamCMD retries and backoff. The project is intended for run-in-container or host-based automated server deployments.
+A3CL is a modern web-based control system for managing Arma 3 dedicated servers. It provides a comprehensive web UI for configuration management, mission orchestration, mod updates, server monitoring, and player management.
 
-## Key features
-- Build and launch Arma 3 dedicated server command line with configurable mods and server mods.
-- Orchestrate configurable number of headless clients (HCs), each with their own logger and log files.
-- Steam Workshop integration via SteamCMD with retries, backoff and transient error detection (e.g. "result 26" / "Request revoked").
-- Optional DLC/app install via SteamCMD (config-driven).
-- Streaming logs from server and HCs into separate files and logger streams; configurable filters and pattern-based split logs.
-- Mod linking and safe operations: symlink creation, normalization, minimal verification.
-- Docker-friendly layout and sensible defaults for log and config paths.
+## Overview
 
-## Project layout
-- `launcher/launcher.py` – CLI entry and orchestration.
-- `launcher/example.json` – example server profile / config (server.json schema reference).
-- `launcher/server_schema.json` – JSON schema used to validate server profiles.
-- `launcher/debug_mods.py` – helper utilities for mod debugging.
-- `launcher/arma_launcher/` – core implementation:
-  - `server.py` – main ServerLauncher: builds launch command, starts server and HCs, streams logs.
-  - `steam.py` – SteamCMD wrapper: downloads mods, installs apps/DLCs, retry logic, output parsing.
-  - `mods.py` – ModManager: resolves mod lists, links mods into server directory, copies keys.
-  - `config.py` – configuration loader: environment + optional JSON profile, defaults and overrides.
-  - `log.py` – centralized logging setup used by all modules.
-  - `config_generator.py` – optional helper to create runtime configs (used by HC/server configs).
-  - `setup.py` – packaging / entry metadata (if used as library).
+The launcher consists of two main components:
+- **Backend API**: FastAPI-based REST API managing server configurations, missions, mods, and server processes
+- **Web UI**: Browser-based interface built with a custom UI framework for intuitive server management
 
-## How it works (high level)
-1. Configuration is loaded from environment variables and optional JSON profile (defaults/active).
-2. Steam credentials can be provided via a JSON file path (default `/var/run/share/steam_credentials.json`) or environment variables.
-3. The `SteamCMD` helper ensures required DLCs/apps are present (if configured) and downloads Workshop mods into a temporary folder using SteamCMD with resilient retry/backoff.
-4. `ModManager` creates safe symlinks from the workshop content to the server mod folders and copies server keys as needed.
-5. `ServerLauncher` builds the Arma 3 process command line:
-   - Adds `-mod` and `-serverMod` parameters by scanning mod directories for `@mod` folders.
-   - Adds base config and parameter config files when present.
-   - Supports file patching config toggles and other launch-time flags.
-6. The Arma server process is spawned with live pipes; separate threads stream stdout/stderr through `stream_reader` into Python loggers and tile files. `stream_reader` supports filters and `separate_patterns` to route noisy or known warning lines to a dedicated file.
-7. Headless clients are started and streamed independently; each HC gets its own logger and log files. An optional start delay (`HC_START_DELAY`) serializes HC startups to reduce rate and race conditions.
-8. SteamCMD invocations are guarded with pattern detection to treat certain outputs as transient (rate limits, "result 26", "Request revoked"), which triggers kill-and-retry behavior with exponential backoff. Optionally a lock-file can be used to serialize SteamCMD access across parallel launcher processes.
+## Key Features
 
-## Configuration
-Configuration may be supplied via environment variables or a JSON profile (see `launcher/example.json`). Important variables:
-- ARMA_BINARY – path to arma3 server binary (default: `/arma3/arma3server_x64`)
-- ARMA_CONFIG_JSON – path to steam credential JSON (default used in container)
-- HC_START_DELAY – seconds to wait between headless client starts (default `1`)
-- LOG_LEVEL – logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`)
-- LOG_JSON – set `"true"` to use JSON formatted logs
-- STEAM_USER / STEAM_PASSWORD – fallback credentials if no credential JSON provided
-- headless_clients – number of headless clients to spawn (configured in JSON profile)
-- dlcs – optional list of appids (strings or objects) to ensure installed via SteamCMD
-- mods / servermods – mod lists or directories as configured in profile
-If "contact" is used, no other DLCs can be used. Any other DLC will switch to creator-branch.
+### Web-Based Management
+- **Configurations Tab**: Create and manage server configurations with base/override architecture
+- **Missions Tab**: Upload and manage missions, check mod compatibility, update workshop content
+- **Dashboard**: Quick access to server status and mission selection
+- **Mods Tab**: Browse, search, and manage installed Workshop mods
+- **Monitoring**: Real-time server status and performance metrics
+- **Logs Tab**: View and filter server logs in real-time
+- **Jobs Tab**: Track background tasks and operations
+- **Players Tab**: Manage player whitelist and permissions
+- **Settings**: Configure launcher behavior and credentials
 
-Example JSON (snippet):
-```json
-{
-  "defaults": {
-    "dlcs": ["234586", {"appid":"654321"}]
-  },
-  "active": "production",
-  "profiles": {
-    "production": {
-      "headless_clients": 2,
-      "mods": ["@cba_a3", "@rhsusf"],
-      "servermods": ["@cba_a3"]
-    }
-  }
-}
+### Server Management
+- Automated Arma 3 server startup with configurable mods and parameters
+- Headless client orchestration with independent logging
+- Steam Workshop integration via SteamCMD with automatic retries and rate limiting
+- DLC/Creator DLC support (Contact, CSLA, Global Mobilization, Western Sahara, SOG, Spearhead 1944, Reaction Forces, Expeditionary Forces)
+- Configuration inheritance system with base defaults and per-config overrides
+- Mission presets with mod compatibility validation
+
+## Project Structure
+
+```
+launcher/
+├── launcher.py              # CLI entry point
+├── example.json             # Example server configuration
+├── server_schema.json       # JSON schema for validation
+├── arma_launcher/           # Core Python modules
+│   ├── api.py              # FastAPI REST API
+│   ├── orchestrator.py     # Server process management
+│   ├── content_manager.py  # Workshop content handling
+│   ├── steamcmd.py         # SteamCMD wrapper
+│   ├── models.py           # Pydantic data models
+│   ├── config_loader.py    # Configuration system
+│   └── ...
+└── web/                     # Web UI
+    └── app/
+        ├── index.html      # Main HTML entry
+        ├── app.js          # Application setup and routing
+        ├── dashboard.js    # Dashboard tab
+        ├── configurations.js  # Configurations tab
+        ├── missions.js     # Missions tab
+        ├── mods.js         # Mods tab
+        ├── logs.js         # Logs tab
+        ├── monitoring.js   # Monitoring tab
+        ├── players.js      # Players tab
+        ├── jobs.js         # Jobs tab
+        ├── settings.js     # Settings tab
+        └── api/
+            └── client.js   # API client wrapper
 ```
 
-## Running (Docker)
+## Web UI Tabs
+
+### Configurations Tab
+
+The **Configurations** tab is the central hub for managing server configurations. It uses a base/override architecture that allows you to define common settings once and override them per configuration.
+
+#### Key Concepts
+
+**Base Configuration (Basis)**
+- The foundation containing default settings shared across all configurations
+- Includes default mod lists, DLC selections, and server parameters
+- Can be edited independently to update all configurations at once
+
+**Configuration Overrides**
+- Individual server configs that inherit from base and apply specific overrides
+- Can add, remove, or replace mods in any category
+- Override DLC selection, server parameters, and network settings
+- Each configuration gets its own `.json` file in the configs directory
+
+**Configuration Variants** (Advanced)
+- Temporary configurations based on existing configs
+- Used for testing mod combinations without modifying the base config
+- Can be created from the API but are not persistent
+
+#### User Interface
+
+The Configurations tab features a **4-tab layout**:
+
+##### 1. Basis Tab
+Displays the base configuration (defaults) that all configurations inherit from.
+
+**Sections:**
+- **Description**: Optional text describing the base configuration
+- **DLCs**: List of installed DLCs/Creator DLCs
+- **Mods**: Table showing mod counts by category:
+  - Server Mods (server-side only)
+  - Base Mods (required by clients and server)
+  - Client Mods (optional client-side)
+  - Maps (terrain/world mods)
+  - Mission Mods (mission-specific content)
+  
+**Click on any category row** to expand and see individual mods with:
+- Mod name
+- Workshop ID
+- Steam Workshop link (🔗 icon)
+
+##### 2. Overrides Tab
+Shows configuration-specific overrides applied on top of the base.
+
+**Override Types:**
+- **Added Mods**: Mods added to specific categories (shown with ➕)
+- **Removed Mods**: Mods removed from base (shown with ➖)
+- **Replace**: Complete replacement of a category (shown with ⚠️ REPLACE)
+
+**Special Fields:**
+- **Description**: Config-specific description
+- **DLC Override**: If different from base DLC selection
+- **Server Parameters**: Network settings (hostname, port, password, etc.)
+
+##### 3. Merged Tab
+Displays the final computed configuration after applying all overrides to the base.
+
+**What you see:**
+- The actual configuration that will be used when starting the server
+- All mod categories with resolved conflicts
+- Final DLC selection
+- Complete server parameters
+
+**Features:**
+- **Export Functions**:
+  - 📥 **Download Preset HTML**: Download an interactive HTML file containing the mod list with Steam Workshop links and checkboxes (for manual mod installation)
+  - 📋 **Copy Launch Parameters**: Copy Arma 3 launch parameters to clipboard (for local testing)
+- **Preview Validation**: Shows any conflicts or warnings
+
+##### 4. Edit Tab
+Interactive editor for modifying the current configuration (base or override).
+
+**DLC Selection:**
+- Visual radio button grid for selecting one DLC/Creator DLC:
+  - Keine (None)
+  - Contact
+  - CSLA Iron Curtain
+  - Global Mobilization
+  - Western Sahara
+  - S.O.G. Prairie Fire
+  - Spearhead 1944
+  - Reaction Forces
+  - Expeditionary Forces
+- Note: Contact is mutually exclusive with other Creator DLCs (automatic branch switching)
+
+**Mod Categories (5 sections):**
+
+Each category has:
+1. **Mod List Table**:
+   - Shows currently configured mods
+   - Checkbox for each mod to mark for deletion (only in config overrides)
+   - Name, ID, and Steam link
+   - Visual indicators:
+     - ✓ Installed locally
+     - 🌐 From Steam Workshop
+     - 📁 Local mod
+     - ⚠️ Error/not found
+
+2. **Add Mods Interface**:
+   - **Text Area**: Paste mod IDs or Steam Workshop URLs (one per line)
+     - Accepts: `450814997`, `https://steamcommunity.com/sharedfiles/filedetails/?id=450814997`
+   - **Resolve Button**: Fetch mod names from Steam API
+     - Shows preview of mods to be added
+     - Displays mod name, ID, and source (Steam/local)
+   - **Add Mods Button**: Add resolved mods to the category
+
+**Categories:**
+- **Server Mods**: Mods only loaded on server (e.g., admin tools, server-side scripts)
+- **Base Mods**: Required mods for all clients (e.g., CBA_A3, RHS)
+- **Client Mods**: Optional client-side mods (UI enhancements, graphics)
+- **Maps**: Terrain and world mods
+- **Mission Mods**: Mission-specific content
+
+**Save/Cancel:**
+- **Save Button**: Persist changes to the configuration file
+- **Cancel Button**: Discard changes and reload from disk
+
+#### Workflows
+
+**Creating a New Configuration:**
+1. Click **➕ Neu** button in the dropdown area
+2. Enter configuration name (no slashes)
+3. Enter optional description
+4. New configuration is created with base defaults
+5. Switch to **Edit** tab to customize
+6. Add/remove mods as needed
+7. Select DLC if required
+8. Click **Save**
+
+**Editing Base Configuration:**
+1. Select **"─── Basis ───"** from dropdown
+2. Switch to **Edit** tab
+3. Modify DLCs and mod categories
+4. Click **Save**
+5. All configurations automatically inherit changes (unless overridden)
+
+**Editing Configuration Override:**
+1. Select configuration from dropdown
+2. Switch to **Edit** tab
+3. Changes are saved as overrides (not affecting base)
+4. Can remove base mods by checking deletion checkbox
+5. Can add new mods via Add Mods interface
+6. Click **Save** to persist
+
+**Adding Mods:**
+1. In **Edit** tab, scroll to desired category
+2. Paste Workshop IDs or URLs in text area (one per line):
+   ```
+   450814997
+   https://steamcommunity.com/sharedfiles/filedetails/?id=843577117
+   463939057
+   ```
+3. Click **Resolve** to fetch mod names from Steam
+4. Review resolved mods (name and ID shown)
+5. Click **Add Mods** to add them to configuration
+6. Repeat for other categories as needed
+7. Click **Save** at bottom of page
+
+**Removing Mods (Config Override Only):**
+1. Select a configuration (not base) from dropdown
+2. Switch to **Edit** tab
+3. Check the checkbox next to mods you want to remove
+4. Click **Save**
+5. Mods are added to "removed" list in override
+
+**Exporting Configurations:**
+1. Select configuration and view **Merged** tab
+2. **For HTML Preset**:
+   - Click **📥 Download Preset HTML**
+   - Save the `.html` file
+   - Open in browser to see interactive mod list with Steam links
+   - Share with players for manual mod installation
+3. **For Launch Parameters**:
+   - Click **📋 Copy Launch Parameters**
+   - Paste into Arma 3 launcher or batch script
+   - Used for local testing/development
+
+#### Technical Details
+
+**Configuration Files:**
+- Base: `configs/_defaults.json` (special file containing defaults)
+- Configs: `configs/{name}.json` (one file per configuration)
+- Format: JSON with optional fields (description, dlcs, workshop overrides, parameters)
+
+**Mod Resolution:**
+- Mods are resolved via Steam Web API when adding
+- Local mods (in `@modname` folders) are detected automatically
+- Workshop mods are downloaded via SteamCMD on server start
+- Metadata is cached to avoid repeated API calls
+
+**Inheritance Rules:**
+- Each category can have: `added`, `removed`, or `replace` arrays
+- `replace` completely overrides the base category
+- `added` appends mods to base category
+- `removed` filters out specific mods from base
+- Higher priority categories (serverMods) shown first to avoid duplicates in display
+
+**Validation:**
+- Configuration names must not contain slashes
+- DLC selection validated against known DLC list
+- Mod IDs validated (numeric Workshop IDs or local paths)
+- JSON schema validation on save
+- Duplicate mod IDs within a category are prevented
+
+---
+
+### Dashboard Tab
+
+*(To be documented)*
+
+### Missions Tab
+
+*(To be documented)*
+
+### Mods Tab
+
+The **Mods** tab is a read-only overview of the Workshop content assigned to a configuration, plus tools to export or sanitize HTML mod presets for players.
+
+#### What it does
+
+- **Select a configuration** from the dropdown to view its Workshop mods, maps, and DLCs.
+- **Open any mod in Steam** by clicking a row in the tables.
+- **Export HTML mod presets** for sharing with players.
+- **Upload and sanitize** an existing HTML preset (removes unknown/invalid entries and normalizes IDs).
+
+#### Sections
+
+**Configuration Selector**
+- Dropdown at the top that drives all tables below.
+- Changing the selection updates the mod lists and enables preset export.
+
+**HTML Preset Import/Export**
+- **⬇ Download All Mods (ohne Server)**: Exports a preset containing all non-server mods.
+- **⬇ Download Mods & Maps**: Exports a preset containing mods + maps only.
+- **Upload & Bereinigen**: Upload a preset `.html` file, sanitize it, and download a cleaned version.
+
+**Mods & Maps**
+- Combined list of **mods** and **maps** from the selected configuration.
+- Each row shows name and Workshop ID; clicking opens the Steam Workshop page.
+
+**Client Mods**
+- Optional mods intended for client-side use only.
+
+**Server Mods**
+- Server-only mods (e.g., server tools or admin utilities).
+
+**DLCs**
+- List of DLCs enabled for the configuration (or “No DLCs” if none are set).
+
+#### Typical workflow
+
+1. Select a configuration.
+2. Review **Mods & Maps**, **Client Mods**, and **Server Mods**.
+3. Click a row to open the Workshop page and share links if needed.
+4. Use **Download** buttons to generate HTML presets for players.
+5. If a player sends a preset back, **Upload & Bereinigen** to sanitize it.
+
+### Logs Tab
+
+*(To be documented)*
+
+### Monitoring Tab
+
+*(To be documented)*
+
+### Players Tab
+
+*(To be documented)*
+
+### Jobs Tab
+
+*(To be documented)*
+
+### Settings Tab
+
+*(To be documented)*
+
+---
+
+## Installation & Deployment
+
+### Docker Deployment (Recommended)
+
 A Dockerfile is included for containerized deployment. Typical run (adjust volumes and ports):
+
 - Map Arma install/mod folders and config:
   - /arma3 – game root and logs
   - /var/run/share – credential JSON if used
